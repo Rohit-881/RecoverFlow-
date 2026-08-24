@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RecoverFlow AI — Revenue Recovery Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface-hover: #242424;
+      --border: #2a2a2a;
+      --text-primary: #f5f5f5;
+      --text-secondary: #a0a0a0;
+      --text-quaternary: #666;
+      --accent: #3b82f6;
+      --positive: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --chart-1: #3b82f6;
+      --chart-2: #ef4444;
+      --chart-3: #22c55e;
+      --chart-4: #a855f7;
+      --chart-5: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .rf-app { max-width: 1100px; margin: 0 auto; }
+    .rf-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .rf-brand { display: flex; align-items: center; gap: 12px; }
+    .rf-logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--text-primary); display: flex;
+      align-items: center; justify-content: center;
+      color: var(--bg); font-weight: 700; font-size: 14px;
+    }
+    .rf-title { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+    .rf-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+    .rf-live {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; padding: 5px 14px; border-radius: 20px;
+      background: rgba(34, 197, 94, 0.12); color: var(--positive);
+      font-weight: 500;
+    }
+    .rf-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--positive); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .rf-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+    .rf-metric-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px; position: relative; overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .rf-metric-card:hover { border-color: #3a3a3a; transform: translateY(-1px); }
+    .rf-metric-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .rf-metric-value { font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+    .rf-metric-delta { font-size: 13px; margin-top: 6px; font-weight: 500; }
+    .rf-metric-delta.up { color: var(--positive); }
+    .rf-metric-delta.down { color: var(--danger); }
+    .rf-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .rf-tab {
+      font-size: 14px; padding: 10px 18px; border: none; background: transparent;
+      cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: all 0.15s; font-weight: 500; font-family: inherit;
+    }
+    .rf-tab:hover { color: var(--text-primary); }
+    .rf-tab.active { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+    .rf-panel { display: none; animation: fadeIn 0.25s ease; }
+    .rf-panel.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .rf-section-title { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
+    .rf-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .rf-table th { text-align: left; padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-weight: 500; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.3px; }
+    .rf-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .rf-table tr { transition: background 0.15s; cursor: pointer; }
+    .rf-table tr:hover { background: var(--surface-hover); }
+    .rf-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 500; }
+    .rf-status.recovered { background: rgba(34, 197, 94, 0.12); color: var(--positive); }
+    .rf-status.retrying { background: rgba(245, 158, 11, 0.12); color: var(--warning); }
+    .rf-status.failed { background: rgba(239, 68, 68, 0.12); color: var(--danger); }
+    .rf-status.pending { background: rgba(107, 114, 128, 0.12); color: var(--text-secondary); }
+    .rf-status.processing { background: rgba(59, 130, 246, 0.12); color: var(--accent); }
+    .rf-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .rf-strategy { font-size: 12px; color: var(--text-secondary); }
+    .rf-amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rf-recovery-bar { width: 70px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .rf-recovery-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+    .rf-recovery-score { font-size: 11px; color: var(--text-quaternary); margin-top: 3px; }
+    .rf-filters { display: flex; gap: 8px; margin-bottom: 14px; }
+    .rf-filter-btn {
+      font-size: 13px; padding: 6px 16px; border-radius: 8px;
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; color: var(--text-secondary); transition: all 0.15s;
+      font-family: inherit;
+    }
+    .rf-filter-btn.active { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+    .rf-filter-btn:hover:not(.active) { background: var(--surface-hover); }
+    .rf-action-btn {
+      font-size: 12px; padding: 5px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; color: var(--text-secondary);
+      opacity: 0; transition: opacity 0.2s; font-family: inherit;
+    }
+    .rf-table tr:hover .rf-action-btn { opacity: 1; }
+    .rf-action-btn:hover { background: var(--surface-hover); }
+    .rf-action-btn.primary { opacity: 1; background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); font-weight: 500; }
+    .rf-action-btn.primary:hover { opacity: 0.9; }
+    .rf-chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+    .rf-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+    .rf-chart-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+    .rf-bar-chart { display: flex; align-items: flex-end; gap: 10px; height: 100px; padding-bottom: 22px; position: relative; }
+    .rf-bar { flex: 1; border-radius: 5px 5px 0 0; min-height: 4px; position: relative; transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    .rf-bar-label { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--text-quaternary); white-space: nowrap; }
+    .rf-bar-value { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; font-weight: 600; }
+    .rf-detail-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 20px; display: none; }
+    .rf-detail-panel.active { display: block; animation: fadeIn 0.3s ease; }
+    .rf-detail-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .rf-two-col { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 20px; }
+    .rf-detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .rf-detail-item { padding: 12px 14px; border-radius: 8px; background: var(--surface-hover); }
+    .rf-detail-item-label { font-size: 11px; color: var(--text-quaternary); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .rf-detail-item-value { font-size: 14px; font-weight: 600; }
+    .rf-audit-timeline { margin-top: 14px; }
+    .rf-audit-item { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .rf-audit-item:last-child { border-bottom: none; }
+    .rf-audit-time { font-size: 12px; color: var(--text-quaternary); width: 80px; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+    .rf-audit-action { font-size: 13px; line-height: 1.4; }
+    .rf-audit-result { font-size: 12px; margin-top: 3px; font-weight: 500; }
+    .rf-audit-result.success { color: var(--positive); }
+    .rf-audit-result.fail { color: var(--danger); }
+    .rf-audit-result.warn { color: var(--warning); }
+    .rf-config-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .rf-config-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+    .rf-config-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+    .rf-config-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rf-config-desc { font-size: 12px; color: var(--text-quaternary); margin-top: 6px; line-height: 1.4; }
+    .rf-slider { width: 100%; margin-top: 12px; accent-color: var(--text-primary); height: 4px; }
+    .rf-simulate-btn {
+      font-size: 14px; padding: 12px 28px; border-radius: 10px;
+      border: none; background: var(--text-primary); color: var(--bg);
+      cursor: pointer; font-weight: 600; transition: all 0.15s;
+      font-family: inherit;
+    }
+    .rf-simulate-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .rf-simulate-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .rf-sim-log {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-top: 16px;
+      max-height: 240px; overflow-y: auto; line-height: 1.7;
+    }
+    .rf-sim-log .log-time { color: var(--text-quaternary); }
+    .rf-sim-log .log-info { color: var(--accent); }
+    .rf-sim-log .log-success { color: var(--positive); }
+    .rf-sim-log .log-warn { color: var(--warning); }
+    .rf-sim-log .log-error { color: var(--danger); }
+    .rf-progress { width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+    .rf-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .rf-score-breakdown { margin-top: 14px; }
+    .rf-score-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+    .rf-score-row:last-child { border-bottom: none; }
+    .rf-score-row .score-label { color: var(--text-secondary); }
+    .rf-score-row .score-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rf-score-row .score-value.pos { color: var(--positive); }
+    .rf-score-row .score-value.neg { color: var(--danger); }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--surface-hover); padding: 2px 6px; border-radius: 4px; }
+    @media (max-width: 768px) {
+      .rf-metrics { grid-template-columns: repeat(2, 1fr); }
+      .rf-chart-row { grid-template-columns: 1fr; }
+      .rf-two-col { grid-template-columns: 1fr; }
+      .rf-config-grid { grid-template-columns: 1fr; }
+      body { padding: 12px; }
+    }
+  </style>
+<base target="_blank">
+</head>
+<body>
+  <div class="rf-app">
+    <div class="rf-header">
+      <div class="rf-brand">
+        <div class="rf-logo">RF</div>
+        <div>
+          <div class="rf-title">RecoverFlow AI</div>
+          <div class="rf-subtitle">Context-aware revenue recovery engine</div>
+        </div>
+      </div>
+      <div class="rf-live"><span class="rf-live-dot"></span>Live — processing webhooks</div>
+    </div>
+
+    <div class="rf-metrics">
+      <div class="rf-metric-card">
+        <div class="rf-metric-label">Revenue at risk <span style="font-size:11px;color:var(--text-quaternary)">this week</span></div>
+        <div class="rf-metric-value" id="metricRisk">₹14.2L</div>
+        <div class="rf-metric-delta down">↓ 8% vs last week</div>
+      </div>
+      <div class="rf-metric-card">
+        <div class="rf-metric-label">Money recovered <span style="font-size:11px;color:var(--text-quaternary)">this week</span></div>
+        <div class="rf-metric-value" id="metricRecovered">₹8.7L</div>
+        <div class="rf-metric-delta up">↑ 12% vs last week</div>
+      </div>
+      <div class="rf-metric-card">
+        <div class="rf-metric-label">Recovery rate</div>
+        <div class="rf-metric-value" id="metricRate">61.3%</div>
+        <div class="rf-metric-delta up">↑ 3.2pp vs last week</div>
+      </div>
+      <div class="rf-metric-card">
+        <div class="rf-metric-label">Avg recovery time</div>
+        <div class="rf-metric-value" id="metricTime">4.2h</div>
+        <div class="rf-metric-delta up">↓ 1.1h faster</div>
+      </div>
+    </div>
+
+    <div class="rf-tabs">
+      <button class="rf-tab active" onclick="switchTab('dashboard')">Dashboard</button>
+      <button class="rf-tab" onclick="switchTab('ai-engine')">AI Engine</button>
+      <button class="rf-tab" onclick="switchTab('simulator')">Live Simulator</button>
+      <button class="rf-tab" onclick="switchTab('config')">Merchant Config</button>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div class="rf-panel active" id="tab-dashboard">
+      <div class="rf-chart-row">
+        <div class="rf-chart-card">
+          <div class="rf-chart-title">Recovery by strategy</div>
+          <div class="rf-bar-chart" id="strategyChart"></div>
+        </div>
+        <div class="rf-chart-card">
+          <div class="rf-chart-title">Failure → recovery funnel</div>
+          <div class="rf-bar-chart" id="funnelChart"></div>
+        </div>
+      </div>
+
+      <div class="rf-section-title">
+        Active recovery cases
+        <button class="rf-action-btn primary" onclick="generateNewFailure()">+ Simulate failure</button>
+      </div>
+      <div class="rf-filters">
+        <button class="rf-filter-btn active" onclick="filterTable('all', event)">All</button>
+        <button class="rf-filter-btn" onclick="filterTable('retrying', event)">Retrying</button>
+        <button class="rf-filter-btn" onclick="filterTable('recovered', event)">Recovered</button>
+        <button class="rf-filter-btn" onclick="filterTable('failed', event)">Failed</button>
+        <button class="rf-filter-btn" onclick="filterTable('pending', event)">Pending</button>
+      </div>
+      <table class="rf-table">
+        <thead>
+          <tr>
+            <th>Transaction</th>
+            <th>Amount</th>
+            <th>Failure reason</th>
+            <th>Recovery potential</th>
+            <th>Strategy</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="txTable"></tbody>
+      </table>
+
+      <div class="rf-detail-panel" id="detailPanel">
+        <div class="rf-detail-title" id="detailTitle">Transaction Details</div>
+        <div class="rf-two-col">
+          <div>
+            <div class="rf-detail-grid" id="detailGrid"></div>
+            <div class="rf-score-breakdown" id="scoreBreakdown"></div>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:10px;">Audit trail</div>
+            <div class="rf-audit-timeline" id="auditTimeline"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI ENGINE TAB -->
+    <div class="rf-panel" id="tab-ai-engine">
+      <div class="rf-section-title">Recovery scoring model</div>
+      <div class="rf-config-grid">
+        <div class="rf-config-item">
+          <div class="rf-config-label">Amount threshold (high value)</div>
+          <div class="rf-config-value">₹10,000</div>
+          <div class="rf-config-desc">Transactions above this get +15 recovery points</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Customer LTV threshold</div>
+          <div class="rf-config-value">₹50,000</div>
+          <div class="rf-config-desc">High-LTV customers get +10 recovery points</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Success history threshold</div>
+          <div class="rf-config-value">70%</div>
+          <div class="rf-config-desc">Customers with >70% past recovery get +20 points</div>
+        </div>
+      </div>
+
+      <div class="rf-section-title" style="margin-top:24px">Strategy decision matrix</div>
+      <table class="rf-table">
+        <thead>
+          <tr>
+            <th>Failure bucket</th>
+            <th>Recovery score</th>
+            <th>Selected strategy</th>
+            <th>Max attempts</th>
+            <th>Timing</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="rf-status" style="background:rgba(59,130,246,0.12);color:var(--accent)">Soft decline</span></td>
+            <td class="rf-amount">70–100</td>
+            <td>Alt-gateway immediate retry</td>
+            <td>2</td>
+            <td>Now + 5 min</td>
+          </tr>
+          <tr>
+            <td><span class="rf-status" style="background:rgba(245,158,11,0.12);color:var(--warning)">Customer action</span></td>
+            <td class="rf-amount">40–70</td>
+            <td>Delayed retry + SMS/WhatsApp</td>
+            <td>3</td>
+            <td>Predicted payday</td>
+          </tr>
+          <tr>
+            <td><span class="rf-status" style="background:rgba(239,68,68,0.12);color:var(--danger)">Hard decline</span></td>
+            <td class="rf-amount">20–40</td>
+            <td>Card update → dunning sequence</td>
+            <td>1 + 2 nudges</td>
+            <td>T+1, T+3, T+7</td>
+          </tr>
+          <tr>
+            <td><span class="rf-status" style="background:rgba(239,68,68,0.12);color:var(--danger)">Fraud / blocked</span></td>
+            <td class="rf-amount">0–20</td>
+            <td>Skip — manual review only</td>
+            <td>0</td>
+            <td>N/A</td>
+          </tr>
+          <tr>
+            <td><span class="rf-status" style="background:rgba(168,85,247,0.12);color:var(--chart-4)">Checkout drop-off</span></td>
+            <td class="rf-amount">50–80</td>
+            <td>Abandoned cart WhatsApp</td>
+            <td>2</td>
+            <td>30 min + 24h</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="rf-section-title" style="margin-top:24px">Feature weights (model v1)</div>
+      <div class="rf-score-breakdown">
+        <div class="rf-score-row"><span class="score-label">Failure type (soft/hard/customer)</span><span class="score-value pos">±30</span></div>
+        <div class="rf-score-row"><span class="score-label">Transaction amount</span><span class="score-value pos">+15 / +10 / 0</span></div>
+        <div class="rf-score-row"><span class="score-label">Customer recovery history</span><span class="score-value pos">+20 / +10 / 0</span></div>
+        <div class="rf-score-row"><span class="score-label">Customer lifetime value</span><span class="score-value pos">+10 / +5 / 0</span></div>
+        <div class="rf-score-row"><span class="score-label">Payment method reliability</span><span class="score-value pos">+10 / +5 / 0</span></div>
+        <div class="rf-score-row"><span class="score-label">Time-of-day optimization</span><span class="score-value pos">+5 / 0</span></div>
+        <div class="rf-score-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:10px;"><span class="score-label">Base score</span><span class="score-value" style="font-size:16px;">50</span></div>
+      </div>
+    </div>
+
+    <!-- SIMULATOR TAB -->
+    <div class="rf-panel" id="tab-simulator">
+      <div class="rf-section-title">Live recovery simulation</div>
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:18px;">Watch RecoverFlow AI detect a failure, score it, select a strategy, and execute bounded recovery in real-time.</p>
+      <button class="rf-simulate-btn" id="simBtn" onclick="runSimulation()">▶ Run full recovery simulation</button>
+      <div class="rf-progress" id="simProgressBar" style="display:none;"><div class="rf-progress-fill" id="simProgressFill" style="width:0%"></div></div>
+      <div class="rf-sim-log" id="simLog" style="display:none;"></div>
+      <div id="simResult" style="margin-top:18px;display:none;">
+        <div class="rf-metric-card" style="display:inline-block;min-width:240px;">
+          <div class="rf-metric-label">Simulation result</div>
+          <div class="rf-metric-value" id="simResultText" style="font-size:22px;"></div>
+          <div class="rf-metric-delta" id="simResultDetail"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIG TAB -->
+    <div class="rf-panel" id="tab-config">
+      <div class="rf-section-title">Merchant recovery rules</div>
+      <div class="rf-config-grid">
+        <div class="rf-config-item">
+          <div class="rf-config-label">Max retry attempts</div>
+          <div class="rf-config-value" id="configMaxRetries">3</div>
+          <input type="range" class="rf-slider" min="1" max="10" value="3" oninput="updateConfig('maxRetries', this.value)">
+          <div class="rf-config-desc">Hard limit on recovery attempts per transaction</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Max cost per recovery (₹)</div>
+          <div class="rf-config-value" id="configMaxCost">50</div>
+          <input type="range" class="rf-slider" min="5" max="200" value="50" oninput="updateConfig('maxCost', this.value)">
+          <div class="rf-config-desc">Stop if communication cost exceeds this limit</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Do-not-disturb start</div>
+          <div class="rf-config-value" id="configDndStart">22:00</div>
+          <input type="range" class="rf-slider" min="18" max="24" value="22" oninput="updateConfig('dndStart', this.value)">
+          <div class="rf-config-desc">No calls/SMS after this hour</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Do-not-disturb end</div>
+          <div class="rf-config-value" id="configDndEnd">08:00</div>
+          <input type="range" class="rf-slider" min="5" max="12" value="8" oninput="updateConfig('dndEnd', this.value)">
+          <div class="rf-config-desc">Resume communications after this hour</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Min recovery score to attempt</div>
+          <div class="rf-config-value" id="configMinScore">20</div>
+          <input type="range" class="rf-slider" min="0" max="50" value="20" oninput="updateConfig('minScore', this.value)">
+          <div class="rf-config-desc">Transactions below this score go to manual review</div>
+        </div>
+        <div class="rf-config-item">
+          <div class="rf-config-label">Auto-retry soft declines</div>
+          <div class="rf-config-value" id="configAutoRetry">On</div>
+          <input type="range" class="rf-slider" min="0" max="1" value="1" oninput="updateConfig('autoRetry', this.value)">
+          <div class="rf-config-desc">Immediately retry soft declines via alternate gateway</div>
+        </div>
+      </div>
+
+      <div class="rf-section-title" style="margin-top:24px">Communication preferences</div>
+      <table class="rf-table">
+        <thead>
+          <tr><th>Channel</th><th>Enabled</th><th>Cost per use (₹)</th><th>Max uses per case</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Smart retry (alt gateway)</td><td>✓</td><td>₹2.5</td><td>2</td></tr>
+          <tr><td>SMS nudge</td><td>✓</td><td>₹0.15</td><td>3</td></tr>
+          <tr><td>WhatsApp message</td><td>✓</td><td>₹0.35</td><td>2</td></tr>
+          <tr><td>Email dunning</td><td>✓</td><td>₹0.05</td><td>3</td></tr>
+          <tr><td>Hinglish voice call</td><td>✓</td><td>₹4.0</td><td>1</td></tr>
+          <tr><td>Payment link</td><td>✓</td><td>₹0.10</td><td>2</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // ===== STATE =====
+    let transactions = [
+      { id: 'pay_A1x9K2mL', amount: 2499, reason: 'Insufficient funds', potential: 78, strategy: 'Delayed retry + SMS', status: 'recovered', bucket: 'customer_action', ltv: 45000, history: 0.82, method: 'UPI', audit: [
+        { time: 'Aug 23, 14:32', action: 'Payment failed — insufficient funds', result: 'fail' },
+        { time: 'Aug 23, 14:33', action: 'Scored recovery potential: 78%', result: 'info' },
+        { time: 'Aug 23, 14:33', action: 'Selected strategy: Delayed retry + SMS', result: 'info' },
+        { time: 'Aug 23, 14:35', action: 'SMS sent to customer', result: 'info' },
+        { time: 'Aug 24, 08:45', action: 'Retry attempt #1 at predicted payday', result: 'success' },
+        { time: 'Aug 24, 08:45', action: '₹2,499 recovered via UPI retry', result: 'success' }
+      ]},
+      { id: 'pay_B3y7N4pQ', amount: 12999, reason: 'Bank timeout', potential: 92, strategy: 'Alt-gateway retry', status: 'recovered', bucket: 'soft', ltv: 120000, history: 0.91, method: 'Credit Card', audit: [
+        { time: 'Aug 23, 11:15', action: 'Payment failed — bank timeout', result: 'fail' },
+        { time: 'Aug 23, 11:15', action: 'Scored recovery potential: 92%', result: 'info' },
+        { time: 'Aug 23, 11:16', action: 'Routed to alternate gateway (Optimiser)', result: 'info' },
+        { time: 'Aug 23, 11:16', action: '₹12,999 recovered in 45s', result: 'success' }
+      ]},
+      { id: 'pay_C5z1M8rS', amount: 899, reason: 'Expired card', potential: 34, strategy: 'Card update email', status: 'retrying', bucket: 'hard', ltv: 12000, history: 0.45, method: 'Debit Card', audit: [
+        { time: 'Aug 23, 09:20', action: 'Payment failed — expired card', result: 'fail' },
+        { time: 'Aug 23, 09:21', action: 'Scored recovery potential: 34%', result: 'info' },
+        { time: 'Aug 23, 09:22', action: 'Sent card update email with payment link', result: 'info' },
+        { time: 'Aug 23, 09:22', action: 'Awaiting customer action...', result: 'info' }
+      ]},
+      { id: 'pay_D2w4P6tU', amount: 4599, reason: 'Do not honor', potential: 22, strategy: 'WhatsApp nudge', status: 'failed', bucket: 'hard', ltv: 8000, history: 0.20, method: 'Credit Card', audit: [
+        { time: 'Aug 22, 16:40', action: 'Payment failed — do not honor', result: 'fail' },
+        { time: 'Aug 22, 16:41', action: 'Scored recovery potential: 22%', result: 'info' },
+        { time: 'Aug 22, 16:42', action: 'Attempt #1: WhatsApp nudge sent', result: 'info' },
+        { time: 'Aug 22, 20:00', action: 'Attempt #2: SMS reminder', result: 'info' },
+        { time: 'Aug 23, 10:00', action: 'Attempt #3: Email dunning', result: 'info' },
+        { time: 'Aug 23, 16:40', action: 'Max retries exhausted. Marked failed.', result: 'fail' }
+      ]},
+      { id: 'pay_E8v0R3xW', amount: 599, reason: 'Network error', potential: 85, strategy: 'Immediate retry', status: 'recovered', bucket: 'soft', ltv: 25000, history: 0.75, method: 'UPI', audit: [
+        { time: 'Aug 23, 13:05', action: 'Payment failed — network error', result: 'fail' },
+        { time: 'Aug 23, 13:05', action: 'Scored recovery potential: 85%', result: 'info' },
+        { time: 'Aug 23, 13:05', action: 'Immediate retry on same gateway', result: 'success' },
+        { time: 'Aug 23, 13:05', action: '₹599 recovered in 12s', result: 'success' }
+      ]},
+      { id: 'pay_F6u2T5yZ', amount: 8999, reason: 'Checkout drop-off', potential: 67, strategy: 'Abandoned cart WA', status: 'retrying', bucket: 'customer_action', ltv: 35000, history: 0.60, method: 'UPI', audit: [
+        { time: 'Aug 23, 12:10', action: 'Checkout abandoned at payment step', result: 'fail' },
+        { time: 'Aug 23, 12:10', action: 'Scored recovery potential: 67%', result: 'info' },
+        { time: 'Aug 23, 12:40', action: 'WhatsApp recovery link sent', result: 'info' },
+        { time: 'Aug 23, 14:20', action: 'Customer clicked link, payment pending', result: 'info' }
+      ]},
+      { id: 'pay_G4s8V1aB', amount: 349, reason: 'UPI declined', potential: 55, strategy: 'Hinglish voice call', status: 'pending', bucket: 'customer_action', ltv: 5000, history: 0.50, method: 'UPI', audit: [
+        { time: 'Aug 23, 18:30', action: 'Payment failed — UPI declined', result: 'fail' },
+        { time: 'Aug 23, 18:31', action: 'Scored recovery potential: 55%', result: 'info' },
+        { time: 'Aug 23, 18:31', action: 'DND active (18:30–08:00). Call scheduled.', result: 'warn' },
+        { time: 'Aug 23, 18:32', action: 'Voice call queued for 08:30 tomorrow', result: 'info' }
+      ]},
+      { id: 'pay_H0q6X9cD', amount: 15999, reason: 'Subscription mandate fail', potential: 71, strategy: 'Smart retry T+1', status: 'recovered', bucket: 'soft', ltv: 200000, history: 0.88, method: 'eNACH', audit: [
+        { time: 'Aug 21, 05:00', action: 'Subscription mandate failed', result: 'fail' },
+        { time: 'Aug 21, 05:01', action: 'Scored recovery potential: 71%', result: 'info' },
+        { time: 'Aug 22, 05:00', action: 'Smart retry T+1 executed', result: 'success' },
+        { time: 'Aug 22, 05:00', action: '₹15,999 recovered, subscription active', result: 'success' }
+      ]}
+    ];
+
+    let merchantConfig = { maxRetries: 3, maxCost: 50, dndStart: 22, dndEnd: 8, minScore: 20, autoRetry: 1 };
+    let currentFilter = 'all';
+    let selectedTx = null;
+
+    function renderMetrics() {
+      const recovered = transactions.filter(t => t.status === 'recovered');
+      const atRisk = transactions.filter(t => t.status !== 'recovered');
+      const totalRisk = atRisk.reduce((s, t) => s + t.amount, 0) + recovered.reduce((s, t) => s + t.amount, 0);
+      const totalRecovered = recovered.reduce((s, t) => s + t.amount, 0);
+      const rate = totalRisk > 0 ? ((totalRecovered / totalRisk) * 100).toFixed(1) : 0;
+      document.getElementById('metricRisk').textContent = '₹' + (totalRisk / 100000).toFixed(1) + 'L';
+      document.getElementById('metricRecovered').textContent = '₹' + (totalRecovered / 100000).toFixed(1) + 'L';
+      document.getElementById('metricRate').textContent = rate + '%';
+    }
+
+    function renderStrategyChart() {
+      const strategies = {};
+      transactions.filter(t => t.status === 'recovered').forEach(t => {
+        strategies[t.strategy] = (strategies[t.strategy] || 0) + t.amount;
+      });
+      const total = Object.values(strategies).reduce((a, b) => a + b, 0) || 1;
+      const data = Object.entries(strategies).map(([name, value]) => ({
+        name: name.split(' ').slice(0, 2).join(' '),
+        value: Math.round((value / total) * 100),
+        color: ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'][Object.keys(strategies).indexOf(name) % 5]
+      }));
+      const max = Math.max(...data.map(d => d.value), 1);
+      document.getElementById('strategyChart').innerHTML = data.map(d => `
+        <div class="rf-bar" style="height: ${(d.value / max) * 100}%; background: ${d.color};">
+          <div class="rf-bar-value">${d.value}%</div>
+          <div class="rf-bar-label">${d.name}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderFunnelChart() {
+      const total = transactions.length;
+      const detected = total;
+      const scored = transactions.filter(t => t.potential > 0).length;
+      const intervened = transactions.filter(t => t.status !== 'pending' || t.audit.length > 1).length;
+      const recovered = transactions.filter(t => t.status === 'recovered').length;
+      const data = [
+        { name: 'Failed', value: 100, color: 'var(--text-quaternary)' },
+        { name: 'Detected', value: Math.round((detected / total) * 100), color: 'var(--text-secondary)' },
+        { name: 'Scored', value: Math.round((scored / total) * 100), color: 'var(--chart-5)' },
+        { name: 'Intervened', value: Math.round((intervened / total) * 100), color: 'var(--chart-4)' },
+        { name: 'Recovered', value: Math.round((recovered / total) * 100), color: 'var(--positive)' },
+      ];
+      const max = 100;
+      document.getElementById('funnelChart').innerHTML = data.map(d => `
+        <div class="rf-bar" style="height: ${(d.value / max) * 100}%; background: ${d.color};">
+          <div class="rf-bar-value">${d.value}%</div>
+          <div class="rf-bar-label">${d.name}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('txTable');
+      const filtered = currentFilter === 'all' ? transactions : transactions.filter(t => t.status === currentFilter);
+      tbody.innerHTML = filtered.map((t, idx) => {
+        const potColor = t.potential > 70 ? 'var(--positive)' : t.potential > 40 ? 'var(--warning)' : 'var(--danger)';
+        const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : 'text-secondary';
+        return `
+        <tr onclick="showDetail(${transactions.indexOf(t)})" style="cursor:pointer;">
+          <td><code>${t.id}</code></td>
+          <td class="rf-amount">₹${t.amount.toLocaleString('en-IN')}</td>
+          <td>${t.reason}</td>
+          <td>
+            <div class="rf-recovery-bar"><div class="rf-recovery-bar-fill" style="width: ${t.potential}%; background: ${potColor};"></div></div>
+            <div class="rf-recovery-score">${t.potential}% potential</div>
+          </td>
+          <td><span class="rf-strategy">${t.strategy}</span></td>
+          <td><span class="rf-status ${t.status}"><span class="rf-dot" style="background: var(--${statusColor});"></span>${t.status}</span></td>
+          <td><button class="rf-action-btn" onclick="event.stopPropagation();showDetail(${transactions.indexOf(t)})">View AI decision</button></td>
+        </tr>
+      `}).join('');
+    }
+
+    function showDetail(idx) {
+      selectedTx = transactions[idx];
+      const panel = document.getElementById('detailPanel');
+      panel.classList.add('active');
+      document.getElementById('detailTitle').textContent = `AI Decision: ${selectedTx.id}`;
+      const base = 50;
+      const amountBonus = selectedTx.amount > 10000 ? 15 : selectedTx.amount > 5000 ? 10 : 0;
+      const ltvBonus = selectedTx.ltv > 50000 ? 10 : selectedTx.ltv > 20000 ? 5 : 0;
+      const historyBonus = selectedTx.history > 0.7 ? 20 : selectedTx.history > 0.4 ? 10 : 0;
+      const bucketBonus = selectedTx.bucket === 'soft' ? 20 : selectedTx.bucket === 'customer_action' ? 5 : -30;
+      const methodBonus = selectedTx.method === 'UPI' ? 5 : 0;
+      document.getElementById('scoreBreakdown').innerHTML = `
+        <div style="font-size:14px;font-weight:600;margin-bottom:10px;">Score breakdown</div>
+        <div class="rf-score-row"><span class="score-label">Base score</span><span class="score-value">${base}</span></div>
+        <div class="rf-score-row"><span class="score-label">Amount (₹${selectedTx.amount.toLocaleString('en-IN')})</span><span class="score-value ${amountBonus >= 0 ? 'pos' : 'neg'}">${amountBonus >= 0 ? '+' : ''}${amountBonus}</span></div>
+        <div class="rf-score-row"><span class="score-label">Customer LTV (₹${selectedTx.ltv.toLocaleString('en-IN')})</span><span class="score-value ${ltvBonus >= 0 ? 'pos' : 'neg'}">${ltvBonus >= 0 ? '+' : ''}${ltvBonus}</span></div>
+        <div class="rf-score-row"><span class="score-label">Recovery history (${(selectedTx.history * 100).toFixed(0)}%)</span><span class="score-value ${historyBonus >= 0 ? 'pos' : 'neg'}">${historyBonus >= 0 ? '+' : ''}${historyBonus}</span></div>
+        <div class="rf-score-row"><span class="score-label">Failure bucket (${selectedTx.bucket})</span><span class="score-value ${bucketBonus >= 0 ? 'pos' : 'neg'}">${bucketBonus >= 0 ? '+' : ''}${bucketBonus}</span></div>
+        <div class="rf-score-row"><span class="score-label">Payment method (${selectedTx.method})</span><span class="score-value ${methodBonus >= 0 ? 'pos' : 'neg'}">${methodBonus >= 0 ? '+' : ''}${methodBonus}</span></div>
+        <div class="rf-score-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:10px;"><span class="score-label">Final score</span><span class="score-value" style="font-size:18px;">${selectedTx.potential}%</span></div>
+      `;
+      document.getElementById('detailGrid').innerHTML = `
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Transaction ID</div><div class="rf-detail-item-value">${selectedTx.id}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Amount</div><div class="rf-detail-item-value">₹${selectedTx.amount.toLocaleString('en-IN')}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Failure reason</div><div class="rf-detail-item-value">${selectedTx.reason}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Failure bucket</div><div class="rf-detail-item-value">${selectedTx.bucket}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Customer LTV</div><div class="rf-detail-item-value">₹${selectedTx.ltv.toLocaleString('en-IN')}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Payment method</div><div class="rf-detail-item-value">${selectedTx.method}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Selected strategy</div><div class="rf-detail-item-value">${selectedTx.strategy}</div></div>
+        <div class="rf-detail-item"><div class="rf-detail-item-label">Max attempts</div><div class="rf-detail-item-value">${selectedTx.potential > 60 ? 3 : selectedTx.potential > 30 ? 2 : 1}</div></div>
+      `;
+      document.getElementById('auditTimeline').innerHTML = selectedTx.audit.map(a => `
+        <div class="rf-audit-item">
+          <div class="rf-audit-time">${a.time}</div>
+          <div>
+            <div class="rf-audit-action">${a.action}</div>
+            <div class="rf-audit-result ${a.result === 'success' ? 'success' : a.result === 'fail' ? 'fail' : a.result === 'warn' ? 'warn' : ''}">${a.result === 'success' ? '✓ Success' : a.result === 'fail' ? '✗ Failed' : a.result === 'warn' ? '⚠ Warning' : 'ℹ Info'}</div>
+          </div>
+        </div>
+      `).join('');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function filterTable(status, event) {
+      if (event) {
+        document.querySelectorAll('.rf-filter-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+      }
+      currentFilter = status;
+      renderTable();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.rf-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.rf-panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+    }
+
+    function updateConfig(key, value) {
+      merchantConfig[key] = parseInt(value);
+      const display = key === 'autoRetry' ? (value == 1 ? 'On' : 'Off') : value;
+      const suffix = key === 'maxCost' ? '' : key === 'dndStart' || key === 'dndEnd' ? ':00' : '';
+      document.getElementById('config' + key.charAt(0).toUpperCase() + key.slice(1)).textContent = display + suffix;
+    }
+
+    function log(msg, type = 'info') {
+      const logEl = document.getElementById('simLog');
+      const time = new Date().toLocaleTimeString('en-IN', { hour12: false });
+      const typeClass = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : 'log-info';
+      logEl.innerHTML += `<div><span class="log-time">[${time}]</span> <span class="${typeClass}">${msg}</span></div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    async function runSimulation() {
+      const btn = document.getElementById('simBtn');
+      const logEl = document.getElementById('simLog');
+      const progressBar = document.getElementById('simProgressBar');
+      const progressFill = document.getElementById('simProgressFill');
+      const resultPanel = document.getElementById('simResult');
+      btn.disabled = true;
+      logEl.style.display = 'block';
+      logEl.innerHTML = '';
+      progressBar.style.display = 'block';
+      progressFill.style.width = '0%';
+      resultPanel.style.display = 'none';
+
+      const simTx = {
+        id: 'pay_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+        amount: [599, 1299, 2499, 4999, 9999, 15999][Math.floor(Math.random() * 6)],
+        reason: ['Bank timeout', 'Insufficient funds', 'Network error', 'Expired card', 'UPI declined'][Math.floor(Math.random() * 5)],
+        method: ['UPI', 'Credit Card', 'Debit Card'][Math.floor(Math.random() * 3)],
+        ltv: Math.floor(Math.random() * 200000) + 5000,
+        history: Math.random(),
+        bucket: 'soft',
+        audit: []
+      };
+      if (simTx.reason === 'Expired card') simTx.bucket = 'hard';
+      else if (simTx.reason === 'Insufficient funds') simTx.bucket = 'customer_action';
+
+      log(`Webhook received: payment.failed`, 'info');
+      await sleep(600);
+      progressFill.style.width = '10%';
+      log(`Transaction: ${simTx.id} | Amount: ₹${simTx.amount.toLocaleString('en-IN')} | Reason: ${simTx.reason}`, 'info');
+      await sleep(800);
+      progressFill.style.width = '25%';
+
+      log(`Running recovery scoring model...`, 'info');
+      await sleep(700);
+      const base = 50;
+      const amountBonus = simTx.amount > 10000 ? 15 : simTx.amount > 5000 ? 10 : 0;
+      const ltvBonus = simTx.ltv > 50000 ? 10 : simTx.ltv > 20000 ? 5 : 0;
+      const historyBonus = simTx.history > 0.7 ? 20 : simTx.history > 0.4 ? 10 : 0;
+      const bucketBonus = simTx.bucket === 'soft' ? 20 : simTx.bucket === 'customer_action' ? 5 : -30;
+      const score = Math.min(100, Math.max(0, base + amountBonus + ltvBonus + historyBonus + bucketBonus));
+      simTx.potential = score;
+      log(`Recovery potential scored: ${score}%`, score > 60 ? 'success' : score > 30 ? 'warn' : 'error');
+      await sleep(600);
+      progressFill.style.width = '40%';
+
+      log(`Selecting optimal strategy...`, 'info');
+      await sleep(500);
+      let strategy, maxAttempts, timing;
+      if (score < 20) { strategy = 'Skip — manual review'; maxAttempts = 0; timing = 'N/A'; }
+      else if (simTx.bucket === 'soft' && score > 70) { strategy = 'Alt-gateway immediate retry'; maxAttempts = 2; timing = 'Now + 5 min'; }
+      else if (simTx.bucket === 'customer_action' && score > 50) { strategy = 'Delayed retry + SMS/WhatsApp'; maxAttempts = 3; timing = 'Predicted payday'; }
+      else if (simTx.bucket === 'hard' && score > 30) { strategy = 'Card update → dunning sequence'; maxAttempts = 1; timing = 'T+1, T+3, T+7'; }
+      else { strategy = 'Manual review queue'; maxAttempts = 1; timing = 'Business hours'; }
+      simTx.strategy = strategy;
+      log(`Selected: ${strategy} | Max attempts: ${maxAttempts} | Timing: ${timing}`, 'info');
+      await sleep(600);
+      progressFill.style.width = '55%';
+
+      log(`Checking merchant bounds (max retries: ${merchantConfig.maxRetries}, max cost: ₹${merchantConfig.maxCost})...`, 'info');
+      await sleep(400);
+      if (score < merchantConfig.minScore) {
+        log(`Score ${score}% below minimum threshold (${merchantConfig.minScore}%). Routing to manual review.`, 'warn');
+        progressFill.style.width = '100%';
+        simTx.status = 'failed';
+        simTx.audit = [
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored ${score}% — below min threshold`, result: 'warn' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: 'Routed to manual review', result: 'info' }
+        ];
+        resultPanel.style.display = 'block';
+        document.getElementById('simResultText').textContent = 'Manual review';
+        document.getElementById('simResultText').style.color = 'var(--warning)';
+        document.getElementById('simResultDetail').textContent = `Score ${score}% below merchant threshold of ${merchantConfig.minScore}%`;
+        btn.disabled = false;
+        transactions.unshift(simTx);
+        renderAll();
+        return;
+      }
+      log(`Bounds satisfied. Proceeding with recovery.`, 'success');
+      await sleep(400);
+      progressFill.style.width = '70%';
+
+      log(`Executing recovery...`, 'info');
+      await sleep(800);
+      const recovered = Math.random() > 0.35;
+      progressFill.style.width = '90%';
+
+      if (recovered) {
+        log(`Recovery successful! ₹${simTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
+        simTx.status = 'recovered';
+        simTx.audit = [
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${score}%`, result: 'info' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy}`, result: 'info' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${simTx.amount.toLocaleString('en-IN')} recovered successfully`, result: 'success' }
+        ];
+        resultPanel.style.display = 'block';
+        document.getElementById('simResultText').textContent = '₹' + simTx.amount.toLocaleString('en-IN') + ' recovered';
+        document.getElementById('simResultText').style.color = 'var(--positive)';
+        document.getElementById('simResultDetail').textContent = `Strategy: ${strategy} | Score: ${score}% | Attempts: 1/${maxAttempts}`;
+      } else {
+        log(`Recovery failed after ${maxAttempts} attempts.`, 'error');
+        simTx.status = 'failed';
+        simTx.audit = [
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${score}%`, result: 'info' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy}`, result: 'info' },
+          { time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Max attempts (${maxAttempts}) exhausted`, result: 'fail' }
+        ];
+        resultPanel.style.display = 'block';
+        document.getElementById('simResultText').textContent = 'Recovery failed';
+        document.getElementById('simResultText').style.color = 'var(--danger)';
+        document.getElementById('simResultDetail').textContent = `Strategy: ${strategy} | Score: ${score}% | All attempts exhausted`;
+      }
+      progressFill.style.width = '100%';
+      btn.disabled = false;
+      transactions.unshift(simTx);
+      renderAll();
+    }
+
+    function generateNewFailure() {
+      const reasons = ['Bank timeout', 'Insufficient funds', 'Network error', 'Expired card', 'UPI declined', 'Do not honor', 'Checkout drop-off'];
+      const methods = ['UPI', 'Credit Card', 'Debit Card', 'eNACH'];
+      const reason = reasons[Math.floor(Math.random() * reasons.length)];
+      let bucket = 'soft';
+      if (['Expired card', 'Do not honor'].includes(reason)) bucket = 'hard';
+      else if (['Insufficient funds', 'Checkout drop-off', 'UPI declined'].includes(reason)) bucket = 'customer_action';
+      const newTx = {
+        id: 'pay_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+        amount: [349, 599, 899, 1299, 2499, 4599, 8999, 12999, 15999][Math.floor(Math.random() * 9)],
+        reason: reason,
+        potential: Math.floor(Math.random() * 80) + 15,
+        strategy: 'Pending AI scoring...',
+        status: 'pending',
+        bucket: bucket,
+        ltv: Math.floor(Math.random() * 200000) + 5000,
+        history: Math.random(),
+        method: methods[Math.floor(Math.random() * methods.length)],
+        audit: [{ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${reason}`, result: 'fail' }]
+      };
+      const base = 50;
+      const amountBonus = newTx.amount > 10000 ? 15 : newTx.amount > 5000 ? 10 : 0;
+      const ltvBonus = newTx.ltv > 50000 ? 10 : newTx.ltv > 20000 ? 5 : 0;
+      const historyBonus = newTx.history > 0.7 ? 20 : newTx.history > 0.4 ? 10 : 0;
+      const bucketBonus = newTx.bucket === 'soft' ? 20 : newTx.bucket === 'customer_action' ? 5 : -30;
+      newTx.potential = Math.min(100, Math.max(0, base + amountBonus + ltvBonus + historyBonus + bucketBonus));
+      if (newTx.bucket === 'soft' && newTx.potential > 70) newTx.strategy = 'Alt-gateway retry';
+      else if (newTx.bucket === 'customer_action' && newTx.potential > 50) newTx.strategy = 'Delayed retry + SMS';
+      else if (newTx.bucket === 'hard' && newTx.potential > 30) newTx.strategy = 'Card update email';
+      else if (newTx.reason === 'Checkout drop-off') newTx.strategy = 'Abandoned cart WA';
+      else newTx.strategy = 'Manual review';
+      newTx.status = newTx.potential > 60 ? 'retrying' : newTx.potential > 20 ? 'pending' : 'failed';
+      if (newTx.status === 'retrying') {
+        newTx.audit.push({ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${newTx.potential}%`, result: 'info' });
+        newTx.audit.push({ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${newTx.strategy}`, result: 'info' });
+      }
+      transactions.unshift(newTx);
+      renderAll();
+    }
+
+    function renderAll() {
+      renderMetrics();
+      renderStrategyChart();
+      renderFunnelChart();
+      renderTable();
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
