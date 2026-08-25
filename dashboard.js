@@ -151,10 +151,19 @@
     <div class="rf-detail-item"><div class="rf-detail-item-label">Max attempts</div><div class="rf-detail-item-value">${selectedTx.potential > 60 ? 3 : selectedTx.potential > 30 ? 2 : 1}</div></div>
     `;
       document.getElementById('auditTimeline').innerHTML = selectedTx.audit.map(a => {
-        const dateStr = a.timestamp ? new Date(a.timestamp).toLocaleString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: false}) : 'Now';
-    return `
+        let dateStr = 'Now';
+        if (a.timestamp) {
+            const d = new Date(a.timestamp);
+            if (!isNaN(d)) {
+                dateStr = d.toLocaleString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: false}).replace(', ', '<br>');
+            }
+        } else if (a.time) {
+            dateStr = a.time.replace(', ', '<br>');
+        }
+        
+        return `
     <div class="rf-audit-item">
-        <div class="rf-audit-time" style="font-size:12px; color:var(--text-secondary); width:60px; line-height:1.2;">${dateStr.replace(', ', '<br>')}</div>
+        <div class="rf-audit-time" style="font-size:12px; color:var(--text-secondary); width:60px; line-height:1.2;">${dateStr}</div>
         <div>
             <div class="rf-audit-action">${a.action}</div>
             <div class="rf-audit-result ${a.result === 'success' ? 'success' : a.result === 'fail' ? 'fail' : a.result === 'warn' ? 'warn' : ''}">${a.result === 'success' ? '✓ Success' : a.result === 'fail' ? '✗ Failed' : a.result === 'warn' ? '⚠ Warning' : 'ℹ Info'}</div>
@@ -263,9 +272,9 @@
     progressFill.style.width = '100%';
     simTx.status = 'failed';
     simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored ${score}% — below min threshold`, result: 'warn' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: 'Routed to manual review', result: 'info' }
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored ${score}% — below min threshold`, result: 'warn', strategy: 'AI Scoring', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: 'Routed to manual review', result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 }
     ];
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = 'Manual review';
@@ -289,10 +298,10 @@
         log(`Recovery successful! ₹${simTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
     simTx.status = 'recovered';
     simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${score}%`, result: 'info' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy}`, result: 'info' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${simTx.amount.toLocaleString('en-IN')} recovered successfully`, result: 'success' }
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${simTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${simTx.amount.toLocaleString('en-IN')} recovered successfully via ${simTx.method}`, result: 'success', strategy: strategy, cost_inr: 2.50 }
     ];
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = '₹' + simTx.amount.toLocaleString('en-IN') + ' recovered';
@@ -302,10 +311,10 @@
         log(`Recovery failed after ${maxAttempts} attempts.`, 'error');
     simTx.status = 'failed';
     simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${simTx.reason}`, result: 'fail' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${score}%`, result: 'info' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy}`, result: 'info' },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Max attempts (${maxAttempts}) exhausted`, result: 'fail' }
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${simTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Max attempts (${maxAttempts}) exhausted`, result: 'fail', strategy: strategy, cost_inr: 5.00 }
     ];
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = 'Recovery failed';

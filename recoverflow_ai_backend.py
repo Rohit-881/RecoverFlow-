@@ -51,6 +51,7 @@ class AuditEntry(BaseModel):
     action: str
     result: str  # "success", "fail", "info", "warn"
     cost_inr: float = 0.0
+    strategy: Optional[str] = None
 
 class Transaction(BaseModel):
     id: str
@@ -486,10 +487,11 @@ async def simulate_failure(background_tasks: BackgroundTasks):
     strategy = select_strategy(txn.potential, txn.bucket, txn.method, config)
     txn.strategy = strategy["action"]
 
+    gateway = random.choice(['HDFC', 'ICICI', 'Razorpay', 'Stripe'])
     txn.audit = [
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Simulated failure: {reason}", result="info"),
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Scored: {txn.potential}%", result="info"),
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Strategy: {txn.strategy}", result="info"),
+        AuditEntry(timestamp=datetime.utcnow(), action=f"Webhook received: payment.failed — {reason} (Gateway: {gateway})", result="fail", strategy="Detection", cost_inr=0.0),
+        AuditEntry(timestamp=datetime.utcnow(), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+        AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
     ]
 
     if txn.potential < config.min_recovery_score:
@@ -508,9 +510,9 @@ async def simulate_failure(background_tasks: BackgroundTasks):
         )[0]
 
     if txn.status == RecoveryStatus.RECOVERED:
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully", result="success"))
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully via {method}", result="success", strategy=txn.strategy, cost_inr=2.50))
     elif txn.status == RecoveryStatus.FAILED:
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail"))
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
 
     transactions_db[txn.id] = txn
     
@@ -534,7 +536,9 @@ async def auto_resolve_mock(txn_id: str):
         txn.audit.append(AuditEntry(
             timestamp=datetime.utcnow(), 
             action=f"Attempt #1: {channel_name.replace('_', ' ').title()} sent", 
-            result="info"
+            result="info",
+            strategy=channel_name,
+            cost_inr=0.50
         ))
         
         # Simulate the outcome
@@ -543,7 +547,7 @@ async def auto_resolve_mock(txn_id: str):
         action_str = f"₹{txn.amount} recovered successfully (Auto)" if txn.status == RecoveryStatus.RECOVERED else "Max retries exhausted (Auto)"
         
         # Add outcome to audit 1 second later to show sequence
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow() + timedelta(seconds=1), action=action_str, result=result_str))
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow() + timedelta(seconds=1), action=action_str, result=result_str, strategy=channel_name, cost_inr=2.50 if txn.status == RecoveryStatus.RECOVERED else 5.00))
 
 @app.post("/transactions/{txn_id}/recover")
 async def trigger_recovery(txn_id: str, background_tasks: BackgroundTasks):
@@ -683,15 +687,15 @@ async def seed_data():
         txn.status = RecoveryStatus(statuses[i])
 
         txn.audit = [
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Payment failed — {data['reason']}", result="fail"),
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Scored recovery potential: {txn.potential}%", result="info"),
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy}", result="info"),
+            AuditEntry(timestamp=datetime.utcnow(), action=f"Webhook received: payment.failed — {data['reason']} (Gateway: HDFC)", result="fail", strategy="Detection", cost_inr=0.0),
+            AuditEntry(timestamp=datetime.utcnow(), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+            AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
         ]
 
         if txn.status == RecoveryStatus.RECOVERED:
-            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully", result="success"))
+            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully", result="success", strategy=txn.strategy, cost_inr=2.50))
         elif txn.status == RecoveryStatus.FAILED:
-            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail"))
+            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
 
         transactions_db[txn.id] = txn
 
