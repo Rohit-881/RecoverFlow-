@@ -262,6 +262,7 @@
         </thead>
         <tbody id="txTable"></tbody>
       </table>
+      <div id="historyLinkContainer" style="text-align:center; padding:14px; font-size:13px; color:var(--text-secondary); cursor:pointer; border-bottom:1px solid var(--border); transition:color 0.2s; font-weight:500;" onclick="toggleHistory()" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-secondary)'" style="display:none;"></div>
 
       <div class="rf-detail-panel" id="detailPanel">
         <div class="rf-detail-title" id="detailTitle">Transaction Details</div>
@@ -438,74 +439,46 @@
 
   <script>
     // ===== STATE =====
-    let transactions = [
-      { id: 'pay_A1x9K2mL', amount: 2499, reason: 'Insufficient funds', potential: 78, strategy: 'Delayed retry + SMS', status: 'recovered', bucket: 'customer_action', ltv: 45000, history: 0.82, method: 'UPI', audit: [
-        { time: 'Aug 23, 14:32', action: 'Payment failed — insufficient funds', result: 'fail' },
-        { time: 'Aug 23, 14:33', action: 'Scored recovery potential: 78%', result: 'info' },
-        { time: 'Aug 23, 14:33', action: 'Selected strategy: Delayed retry + SMS', result: 'info' },
-        { time: 'Aug 23, 14:35', action: 'SMS sent to customer', result: 'info' },
-        { time: 'Aug 24, 08:45', action: 'Retry attempt #1 at predicted payday', result: 'success' },
-        { time: 'Aug 24, 08:45', action: '₹2,499 recovered via UPI retry', result: 'success' }
-      ]},
-      { id: 'pay_B3y7N4pQ', amount: 12999, reason: 'Bank timeout', potential: 92, strategy: 'Alt-gateway retry', status: 'recovered', bucket: 'soft', ltv: 120000, history: 0.91, method: 'Credit Card', audit: [
-        { time: 'Aug 23, 11:15', action: 'Payment failed — bank timeout', result: 'fail' },
-        { time: 'Aug 23, 11:15', action: 'Scored recovery potential: 92%', result: 'info' },
-        { time: 'Aug 23, 11:16', action: 'Routed to alternate gateway (Optimiser)', result: 'info' },
-        { time: 'Aug 23, 11:16', action: '₹12,999 recovered in 45s', result: 'success' }
-      ]},
-      { id: 'pay_C5z1M8rS', amount: 899, reason: 'Expired card', potential: 34, strategy: 'Card update email', status: 'retrying', bucket: 'hard', ltv: 12000, history: 0.45, method: 'Debit Card', audit: [
-        { time: 'Aug 23, 09:20', action: 'Payment failed — expired card', result: 'fail' },
-        { time: 'Aug 23, 09:21', action: 'Scored recovery potential: 34%', result: 'info' },
-        { time: 'Aug 23, 09:22', action: 'Sent card update email with payment link', result: 'info' },
-        { time: 'Aug 23, 09:22', action: 'Awaiting customer action...', result: 'info' }
-      ]},
-      { id: 'pay_D2w4P6tU', amount: 4599, reason: 'Do not honor', potential: 22, strategy: 'WhatsApp nudge', status: 'failed', bucket: 'hard', ltv: 8000, history: 0.20, method: 'Credit Card', audit: [
-        { time: 'Aug 22, 16:40', action: 'Payment failed — do not honor', result: 'fail' },
-        { time: 'Aug 22, 16:41', action: 'Scored recovery potential: 22%', result: 'info' },
-        { time: 'Aug 22, 16:42', action: 'Attempt #1: WhatsApp nudge sent', result: 'info' },
-        { time: 'Aug 22, 20:00', action: 'Attempt #2: SMS reminder', result: 'info' },
-        { time: 'Aug 23, 10:00', action: 'Attempt #3: Email dunning', result: 'info' },
-        { time: 'Aug 23, 16:40', action: 'Max retries exhausted. Marked failed.', result: 'fail' }
-      ]},
-      { id: 'pay_E8v0R3xW', amount: 599, reason: 'Network error', potential: 85, strategy: 'Immediate retry', status: 'recovered', bucket: 'soft', ltv: 25000, history: 0.75, method: 'UPI', audit: [
-        { time: 'Aug 23, 13:05', action: 'Payment failed — network error', result: 'fail' },
-        { time: 'Aug 23, 13:05', action: 'Scored recovery potential: 85%', result: 'info' },
-        { time: 'Aug 23, 13:05', action: 'Immediate retry on same gateway', result: 'success' },
-        { time: 'Aug 23, 13:05', action: '₹599 recovered in 12s', result: 'success' }
-      ]},
-      { id: 'pay_F6u2T5yZ', amount: 8999, reason: 'Checkout drop-off', potential: 67, strategy: 'Abandoned cart WA', status: 'retrying', bucket: 'customer_action', ltv: 35000, history: 0.60, method: 'UPI', audit: [
-        { time: 'Aug 23, 12:10', action: 'Checkout abandoned at payment step', result: 'fail' },
-        { time: 'Aug 23, 12:10', action: 'Scored recovery potential: 67%', result: 'info' },
-        { time: 'Aug 23, 12:40', action: 'WhatsApp recovery link sent', result: 'info' },
-        { time: 'Aug 23, 14:20', action: 'Customer clicked link, payment pending', result: 'info' }
-      ]},
-      { id: 'pay_G4s8V1aB', amount: 349, reason: 'UPI declined', potential: 55, strategy: 'Hinglish voice call', status: 'pending', bucket: 'customer_action', ltv: 5000, history: 0.50, method: 'UPI', audit: [
-        { time: 'Aug 23, 18:30', action: 'Payment failed — UPI declined', result: 'fail' },
-        { time: 'Aug 23, 18:31', action: 'Scored recovery potential: 55%', result: 'info' },
-        { time: 'Aug 23, 18:31', action: 'DND active (18:30–08:00). Call scheduled.', result: 'warn' },
-        { time: 'Aug 23, 18:32', action: 'Voice call queued for 08:30 tomorrow', result: 'info' }
-      ]},
-      { id: 'pay_H0q6X9cD', amount: 15999, reason: 'Subscription mandate fail', potential: 71, strategy: 'Smart retry T+1', status: 'recovered', bucket: 'soft', ltv: 200000, history: 0.88, method: 'eNACH', audit: [
-        { time: 'Aug 21, 05:00', action: 'Subscription mandate failed', result: 'fail' },
-        { time: 'Aug 21, 05:01', action: 'Scored recovery potential: 71%', result: 'info' },
-        { time: 'Aug 22, 05:00', action: 'Smart retry T+1 executed', result: 'success' },
-        { time: 'Aug 22, 05:00', action: '₹15,999 recovered, subscription active', result: 'success' }
-      ]}
-    ];
+    let transactions = []; // Start with an empty array
+
+    // Fetch real data from the backend
+    async function fetchTransactions() {
+      try {
+        // We assume your FastAPI backend has an endpoint at GET /transactions
+        const response = await fetch('http://localhost:8000/transactions'); 
+        if (!response.ok) throw new Error("Network response was not ok");
+        
+        transactions = await response.json();
+        
+        // Re-render the dashboard metrics, charts, and tables with the new data
+        renderAll(); 
+      } catch (error) {
+        console.error("Error fetching data from backend:", error);
+      }
+    }
 
     let merchantConfig = { maxRetries: 3, maxCost: 50, dndStart: 22, dndEnd: 8, minScore: 20, autoRetry: 1 };
     let currentFilter = 'all';
     let selectedTx = null;
+    let showHistory = false;
 
-    function renderMetrics() {
-      const recovered = transactions.filter(t => t.status === 'recovered');
-      const atRisk = transactions.filter(t => t.status !== 'recovered');
-      const totalRisk = atRisk.reduce((s, t) => s + t.amount, 0) + recovered.reduce((s, t) => s + t.amount, 0);
-      const totalRecovered = recovered.reduce((s, t) => s + t.amount, 0);
-      const rate = totalRisk > 0 ? ((totalRecovered / totalRisk) * 100).toFixed(1) : 0;
-      document.getElementById('metricRisk').textContent = '₹' + (totalRisk / 100000).toFixed(1) + 'L';
-      document.getElementById('metricRecovered').textContent = '₹' + (totalRecovered / 100000).toFixed(1) + 'L';
-      document.getElementById('metricRate').textContent = rate + '%';
+    function toggleHistory() {
+      showHistory = !showHistory;
+      renderTable();
+    }
+
+    async function renderMetrics() {
+      try {
+        const response = await fetch('http://localhost:8000/metrics');
+        const metrics = await response.json();
+        
+        document.getElementById('metricRisk').textContent = '₹' + metrics.revenue_at_risk.toLocaleString('en-IN');
+        document.getElementById('metricRecovered').textContent = '₹' + metrics.money_recovered.toLocaleString('en-IN');
+        document.getElementById('metricRate').textContent = metrics.recovery_rate + '%';
+        document.getElementById('metricTime').textContent = metrics.avg_recovery_time_hours + 'h';
+      } catch (error) {
+        console.error("Error fetching metrics:", error);
+      }
     }
 
     function renderStrategyChart() {
@@ -529,17 +502,19 @@
     }
 
     function renderFunnelChart() {
-      const total = transactions.length;
-      const detected = total;
-      const scored = transactions.filter(t => t.potential > 0).length;
-      const intervened = transactions.filter(t => t.status !== 'pending' || t.audit.length > 1).length;
+      const detected = transactions.length;
+      // Simulate gateway failures vs detected webhooks for realistic funnel drop-off
+      const failed = Math.floor(detected * 1.12) || 1; 
+      const scored = transactions.filter(t => t.potential > 20).length; // Exclude unrecoverable low scores
+      const intervened = transactions.filter(t => ['retrying', 'recovered', 'failed'].includes(t.status)).length; // Exclude pending/manual review
       const recovered = transactions.filter(t => t.status === 'recovered').length;
+      
       const data = [
         { name: 'Failed', value: 100, color: 'var(--text-quaternary)' },
-        { name: 'Detected', value: Math.round((detected / total) * 100), color: 'var(--text-secondary)' },
-        { name: 'Scored', value: Math.round((scored / total) * 100), color: 'var(--chart-5)' },
-        { name: 'Intervened', value: Math.round((intervened / total) * 100), color: 'var(--chart-4)' },
-        { name: 'Recovered', value: Math.round((recovered / total) * 100), color: 'var(--positive)' },
+        { name: 'Detected', value: Math.round((detected / failed) * 100), color: 'var(--text-secondary)' },
+        { name: 'Scored', value: Math.round((scored / failed) * 100), color: 'var(--chart-5)' },
+        { name: 'Intervened', value: Math.round((intervened / failed) * 100), color: 'var(--chart-4)' },
+        { name: 'Recovered', value: Math.round((recovered / failed) * 100), color: 'var(--positive)' },
       ];
       const max = 100;
       document.getElementById('funnelChart').innerHTML = data.map(d => `
@@ -553,11 +528,14 @@
     function renderTable() {
       const tbody = document.getElementById('txTable');
       const filtered = currentFilter === 'all' ? transactions : transactions.filter(t => t.status === currentFilter);
-      tbody.innerHTML = filtered.map((t, idx) => {
+      const displayData = showHistory ? filtered : filtered.slice(0, 10);
+      
+      tbody.innerHTML = displayData.map((t) => {
+        const idx = transactions.indexOf(t);
         const potColor = t.potential > 70 ? 'var(--positive)' : t.potential > 40 ? 'var(--warning)' : 'var(--danger)';
         const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : 'text-secondary';
         return `
-        <tr onclick="showDetail(${transactions.indexOf(t)})" style="cursor:pointer;">
+        <tr onclick="showDetail(${idx})" style="cursor:pointer;">
           <td><code>${t.id}</code></td>
           <td class="rf-amount">₹${t.amount.toLocaleString('en-IN')}</td>
           <td>${t.reason}</td>
@@ -567,9 +545,17 @@
           </td>
           <td><span class="rf-strategy">${t.strategy}</span></td>
           <td><span class="rf-status ${t.status}"><span class="rf-dot" style="background: var(--${statusColor});"></span>${t.status}</span></td>
-          <td><button class="rf-action-btn" onclick="event.stopPropagation();showDetail(${transactions.indexOf(t)})">View AI decision</button></td>
+          <td><button class="rf-action-btn" onclick="event.stopPropagation();showDetail(${idx})">View AI decision</button></td>
         </tr>
       `}).join('');
+      
+      const historyLink = document.getElementById('historyLinkContainer');
+      if (filtered.length > 10) {
+        historyLink.style.display = 'block';
+        historyLink.innerHTML = showHistory ? 'Hide older transactions ↑' : 'View full transaction history (' + (filtered.length - 10) + ' older) ↓';
+      } else {
+        historyLink.style.display = 'none';
+      }
     }
 
     function showDetail(idx) {
@@ -603,15 +589,17 @@
         <div class="rf-detail-item"><div class="rf-detail-item-label">Selected strategy</div><div class="rf-detail-item-value">${selectedTx.strategy}</div></div>
         <div class="rf-detail-item"><div class="rf-detail-item-label">Max attempts</div><div class="rf-detail-item-value">${selectedTx.potential > 60 ? 3 : selectedTx.potential > 30 ? 2 : 1}</div></div>
       `;
-      document.getElementById('auditTimeline').innerHTML = selectedTx.audit.map(a => `
+      document.getElementById('auditTimeline').innerHTML = selectedTx.audit.map(a => {
+        const dateStr = a.timestamp ? new Date(a.timestamp).toLocaleString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: false}) : 'Now';
+        return `
         <div class="rf-audit-item">
-          <div class="rf-audit-time">${a.time}</div>
+          <div class="rf-audit-time" style="font-size:12px; color:var(--text-secondary); width:60px; line-height:1.2;">${dateStr.replace(', ', '<br>')}</div>
           <div>
             <div class="rf-audit-action">${a.action}</div>
             <div class="rf-audit-result ${a.result === 'success' ? 'success' : a.result === 'fail' ? 'fail' : a.result === 'warn' ? 'warn' : ''}">${a.result === 'success' ? '✓ Success' : a.result === 'fail' ? '✗ Failed' : a.result === 'warn' ? '⚠ Warning' : 'ℹ Info'}</div>
           </div>
         </div>
-      `).join('');
+      `}).join('');
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -769,44 +757,16 @@
       renderAll();
     }
 
-    function generateNewFailure() {
-      const reasons = ['Bank timeout', 'Insufficient funds', 'Network error', 'Expired card', 'UPI declined', 'Do not honor', 'Checkout drop-off'];
-      const methods = ['UPI', 'Credit Card', 'Debit Card', 'eNACH'];
-      const reason = reasons[Math.floor(Math.random() * reasons.length)];
-      let bucket = 'soft';
-      if (['Expired card', 'Do not honor'].includes(reason)) bucket = 'hard';
-      else if (['Insufficient funds', 'Checkout drop-off', 'UPI declined'].includes(reason)) bucket = 'customer_action';
-      const newTx = {
-        id: 'pay_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
-        amount: [349, 599, 899, 1299, 2499, 4599, 8999, 12999, 15999][Math.floor(Math.random() * 9)],
-        reason: reason,
-        potential: Math.floor(Math.random() * 80) + 15,
-        strategy: 'Pending AI scoring...',
-        status: 'pending',
-        bucket: bucket,
-        ltv: Math.floor(Math.random() * 200000) + 5000,
-        history: Math.random(),
-        method: methods[Math.floor(Math.random() * methods.length)],
-        audit: [{ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Payment failed — ${reason}`, result: 'fail' }]
-      };
-      const base = 50;
-      const amountBonus = newTx.amount > 10000 ? 15 : newTx.amount > 5000 ? 10 : 0;
-      const ltvBonus = newTx.ltv > 50000 ? 10 : newTx.ltv > 20000 ? 5 : 0;
-      const historyBonus = newTx.history > 0.7 ? 20 : newTx.history > 0.4 ? 10 : 0;
-      const bucketBonus = newTx.bucket === 'soft' ? 20 : newTx.bucket === 'customer_action' ? 5 : -30;
-      newTx.potential = Math.min(100, Math.max(0, base + amountBonus + ltvBonus + historyBonus + bucketBonus));
-      if (newTx.bucket === 'soft' && newTx.potential > 70) newTx.strategy = 'Alt-gateway retry';
-      else if (newTx.bucket === 'customer_action' && newTx.potential > 50) newTx.strategy = 'Delayed retry + SMS';
-      else if (newTx.bucket === 'hard' && newTx.potential > 30) newTx.strategy = 'Card update email';
-      else if (newTx.reason === 'Checkout drop-off') newTx.strategy = 'Abandoned cart WA';
-      else newTx.strategy = 'Manual review';
-      newTx.status = newTx.potential > 60 ? 'retrying' : newTx.potential > 20 ? 'pending' : 'failed';
-      if (newTx.status === 'retrying') {
-        newTx.audit.push({ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored recovery potential: ${newTx.potential}%`, result: 'info' });
-        newTx.audit.push({ time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${newTx.strategy}`, result: 'info' });
+    async function generateNewFailure() {
+      try {
+        const response = await fetch('http://localhost:8000/transactions/simulate', {
+          method: 'POST'
+        });
+        if (!response.ok) throw new Error("Network response was not ok");
+        await fetchTransactions(); // Refresh the list from the backend
+      } catch (error) {
+        console.error("Error simulating failure:", error);
       }
-      transactions.unshift(newTx);
-      renderAll();
     }
 
     function renderAll() {
@@ -815,8 +775,8 @@
       renderFunnelChart();
       renderTable();
     }
-
-    renderAll();
+    // Call the backend as soon as the page loads instead of just rendering empty data
+    fetchTransactions();
   </script>
 </body>
 </html>

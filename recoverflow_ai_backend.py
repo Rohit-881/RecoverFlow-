@@ -57,7 +57,7 @@ class Transaction(BaseModel):
     amount: int
     currency: str = "INR"
     reason: str
-    bucket: FailureBucket
+    bucket: FailureBucket = FailureBucket.CUSTOMER_ACTION
     status: RecoveryStatus = RecoveryStatus.PENDING
     potential: int = 0
     strategy: str = "Pending AI scoring..."
@@ -123,7 +123,7 @@ FAILURE_BUCKETS = {
 }
 
 def classify_failure(error_code: str, description: str = "") -> FailureBucket:
-    error_lower = error_code.lower()
+    error_lower = error_code.lower().replace(" ", "_")
     for bucket, codes in FAILURE_BUCKETS.items():
         if any(code in error_lower for code in codes):
             return FailureBucket(bucket)
@@ -406,7 +406,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
         AuditEntry(
             timestamp=datetime.utcnow(),
             action=f"Webhook received: {event} — {txn.reason}",
-            result="info",
+            result="fail",
         ),
         AuditEntry(
             timestamp=datetime.utcnow(),
@@ -462,8 +462,14 @@ async def process_recovery(txn_id: str, strategy: Dict[str, Any], config: Mercha
     print(f"[RECOVERY] {txn_id}: {result.status.value} | ₹{result.amount_recovered} | {result.attempts_used} attempts | ₹{result.total_cost:.2f} cost")
 
 @app.post("/transactions/simulate")
-async def simulate_failure(amount: int = 2499, reason: str = "Insufficient funds", method: str = "UPI"):
+async def simulate_failure(background_tasks: BackgroundTasks):
     """Simulate a payment failure for demo purposes."""
+    reasons = ['Bank timeout', 'Insufficient funds', 'Network error', 'Expired card', 'UPI declined', 'Do not honor', 'Checkout drop-off']
+    methods = ['UPI', 'Credit Card', 'Debit Card', 'eNACH']
+    reason = random.choice(reasons)
+    method = random.choice(methods)
+    amount = random.choice([349, 599, 899, 1299, 2499, 4599, 8999, 12999, 15999])
+
     txn = Transaction(
         id=f"pay_{random.randint(10000000, 99999999)}",
         amount=amount,
@@ -489,10 +495,55 @@ async def simulate_failure(amount: int = 2499, reason: str = "Insufficient funds
     if txn.potential < config.min_recovery_score:
         txn.status = RecoveryStatus.MANUAL_REVIEW
     else:
-        txn.status = RecoveryStatus.RETRYING
+        # Heavily favor RECOVERED to showcase a successful AI agent (60% recovered, 25% retrying, 10% pending, 10% failed)
+        txn.status = random.choices(
+            population=[
+                RecoveryStatus.RECOVERED,
+                RecoveryStatus.RETRYING,
+                RecoveryStatus.PENDING,
+                RecoveryStatus.FAILED
+            ],
+            weights=[60, 25, 10, 10],
+            k=1
+        )[0]
+
+    if txn.status == RecoveryStatus.RECOVERED:
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully", result="success"))
+    elif txn.status == RecoveryStatus.FAILED:
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail"))
 
     transactions_db[txn.id] = txn
-    return txn
+    
+    # Auto-resolve pending/retrying cases after a few seconds so revenue at risk doesn't climb infinitely
+    if txn.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING]:
+        background_tasks.add_task(auto_resolve_mock, txn.id)
+        
+    return {"status": txn.status.value, "txn_id": txn.id, "amount": txn.amount}
+
+async def auto_resolve_mock(txn_id: str):
+    """Simulates the AI resolving the case in the background after some time."""
+    await asyncio.sleep(12)  # Wait 12 seconds
+    txn = transactions_db.get(txn_id)
+    if txn and txn.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING]:
+        # Log the attempt method based on the strategy
+        config = merchant_configs.get(txn.merchant_id, MerchantConfig())
+        strategy = select_strategy(txn.potential, txn.bucket, txn.method, config)
+        channels = strategy.get("channels", [])
+        channel_name = channels[0] if channels else "system_retry"
+        
+        txn.audit.append(AuditEntry(
+            timestamp=datetime.utcnow(), 
+            action=f"Attempt #1: {channel_name.replace('_', ' ').title()} sent", 
+            result="info"
+        ))
+        
+        # Simulate the outcome
+        txn.status = random.choices([RecoveryStatus.RECOVERED, RecoveryStatus.FAILED], weights=[85, 15])[0]
+        result_str = "success" if txn.status == RecoveryStatus.RECOVERED else "fail"
+        action_str = f"₹{txn.amount} recovered successfully (Auto)" if txn.status == RecoveryStatus.RECOVERED else "Max retries exhausted (Auto)"
+        
+        # Add outcome to audit 1 second later to show sequence
+        txn.audit.append(AuditEntry(timestamp=datetime.utcnow() + timedelta(seconds=1), action=action_str, result=result_str))
 
 @app.post("/transactions/{txn_id}/recover")
 async def trigger_recovery(txn_id: str, background_tasks: BackgroundTasks):
@@ -532,13 +583,30 @@ async def get_metrics() -> DashboardMetrics:
     txns = list(transactions_db.values())
     recovered = [t for t in txns if t.status == RecoveryStatus.RECOVERED]
     failed = [t for t in txns if t.status == RecoveryStatus.FAILED]
-    active = [t for t in txns if t.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING]]
+    active = [t for t in txns if t.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING, RecoveryStatus.MANUAL_REVIEW]]
 
-    total_risk = sum(t.amount for t in txns)
+    total_risk = sum(t.amount for t in active)
     total_recovered = sum(t.amount for t in recovered)
-    rate = (total_recovered / total_risk * 100) if total_risk > 0 else 0
+    total_failed_resolved = sum(t.amount for t in failed)
+    
+    total_resolved = total_recovered + total_failed_resolved
+    rate = (total_recovered / total_resolved * 100) if total_resolved > 0 else 0
 
-    avg_time = 4.2  # Mock — in production, calculate from audit timestamps
+    total_time = 0.0
+    for t in recovered:
+        strategy = t.strategy.lower()
+        if any(x in strategy for x in ['immediate', 'alt-gateway', 'smart']):
+            total_time += 0.1
+        elif any(x in strategy for x in ['abandoned', 'cart']):
+            total_time += 2.0
+        elif any(x in strategy for x in ['delayed', 'nudge', 'sms']):
+            total_time += 12.0
+        elif any(x in strategy for x in ['dunning', 'email', 'card update']):
+            total_time += 48.0
+        else:
+            total_time += 4.2
+            
+    avg_time = round(total_time / len(recovered), 1) if recovered else 0.0
 
     return DashboardMetrics(
         revenue_at_risk=total_risk,
@@ -615,7 +683,7 @@ async def seed_data():
         txn.status = RecoveryStatus(statuses[i])
 
         txn.audit = [
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Payment failed — {data['reason']}", result="info"),
+            AuditEntry(timestamp=datetime.utcnow(), action=f"Payment failed — {data['reason']}", result="fail"),
             AuditEntry(timestamp=datetime.utcnow(), action=f"Scored recovery potential: {txn.potential}%", result="info"),
             AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy}", result="info"),
         ]
