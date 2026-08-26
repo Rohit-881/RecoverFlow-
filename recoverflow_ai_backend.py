@@ -16,13 +16,36 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
 from enum import Enum
 import random
 import json
 import asyncio
+import os
+import hmac
+import hashlib
+from dotenv import load_dotenv
+# pyrefly: ignore [missing-import]
+import razorpay
 
-app = FastAPI(title="RecoverFlow AI", version="1.0.0")
+load_dotenv()
+
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+rzp_client = None
+if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+    rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Seed data on startup
+    await seed_data()
+    yield
+
+app = FastAPI(title="RecoverFlow AI", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -198,7 +221,7 @@ def score_recovery_potential(txn: Transaction) -> Dict[str, Any]:
 
 def predict_optimal_retry_time(txn: Transaction) -> datetime:
     """Predict best time to retry based on customer patterns."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     # Simple heuristic: retry during business hours (10 AM - 6 PM IST)
     if now.hour < 4 or now.hour > 12:  # UTC -> IST offset
         return now + timedelta(hours=(10 - (now.hour + 5) % 24) % 24)
@@ -273,7 +296,7 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
     Execute recovery within merchant-defined bounds.
     Returns full audit trail and result.
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     attempts = 0
     cost_accrued = 0.0
     audit = list(txn.audit)
@@ -282,10 +305,10 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
 
     while attempts < max_attempts and cost_accrued < config.max_cost_per_recovery:
         # Check DND
-        current_hour = (datetime.utcnow().hour + 5) % 24  # IST
+        current_hour = (datetime.now(timezone.utc).hour + 5) % 24  # IST
         if config.dnd_start_hour <= current_hour or current_hour < config.dnd_end_hour:
             audit.append(AuditEntry(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 action=f"DND active ({config.dnd_start_hour}:00-{config.dnd_end_hour}:00 IST). Scheduling for next window.",
                 result="warn",
                 cost_inr=0.0,
@@ -307,12 +330,12 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
 
         if recovered:
             audit.append(AuditEntry(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 action=f"Attempt #{attempts}: {action_name} via {channel} — ₹{txn.amount} recovered",
                 result="success",
                 cost_inr=cost,
             ))
-            time_taken = (datetime.utcnow() - start_time).total_seconds()
+            time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()
             return RecoveryResult(
                 txn_id=txn.id,
                 status=RecoveryStatus.RECOVERED,
@@ -324,7 +347,7 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
             )
         else:
             audit.append(AuditEntry(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 action=f"Attempt #{attempts}: {action_name} via {channel} — failed",
                 result="fail",
                 cost_inr=cost,
@@ -337,20 +360,20 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
     # Max attempts exhausted or cost exceeded
     if cost_accrued >= config.max_cost_per_recovery:
         audit.append(AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Stopped: cost limit ₹{config.max_cost_per_recovery} exceeded (spent ₹{cost_accrued:.2f})",
             result="warn",
             cost_inr=0.0,
         ))
     else:
         audit.append(AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Max attempts ({max_attempts}) exhausted. Marked as failed.",
             result="fail",
             cost_inr=0.0,
         ))
 
-    time_taken = (datetime.utcnow() - start_time).total_seconds()
+    time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()
     return RecoveryResult(
         txn_id=txn.id,
         status=RecoveryStatus.FAILED,
@@ -363,8 +386,8 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
 
 # ======================== API ENDPOINTS ========================
 
-@app.post("/webhooks/razorpay")
-async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
+# @app.post("/webhooks/razorpay")  # Duplicate endpoint intercepting requests
+async def razorpay_webhook_deprecated(request: Request, background_tasks: BackgroundTasks):
     """
     Receive Razorpay webhooks for payment failures.
     In production, verify webhook signature using Razorpay secret.
@@ -384,7 +407,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
         reason=payment.get("error_description", "Unknown"),
         method=payment.get("method", "unknown"),
         customer_id=payment.get("customer_id", ""),
-        merchant_id=payload.get("payload", {}).get("payment", {}).get("entity", {}).get("notes", {}).get("merchant_id", "merchant_default"),
+        merchant_id=payment.get("notes", {}).get("merchant_id", "merchant_default") if isinstance(payment.get("notes"), dict) else "merchant_default",
     )
 
     # Classify and score
@@ -405,17 +428,17 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
     # Initial audit
     txn.audit = [
         AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Webhook received: {event} — {txn.reason}",
             result="fail",
         ),
         AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Classified as: {txn.bucket.value} | Scored: {txn.potential}%",
             result="info",
         ),
         AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Selected strategy: {txn.strategy}",
             result="info",
         ),
@@ -425,7 +448,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
     if txn.potential < config.min_recovery_score:
         txn.status = RecoveryStatus.MANUAL_REVIEW
         txn.audit.append(AuditEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             action=f"Score {txn.potential}% below threshold {config.min_recovery_score}%. Routed to manual review.",
             result="warn",
         ))
@@ -489,9 +512,9 @@ async def simulate_failure(background_tasks: BackgroundTasks):
 
     gateway = random.choice(['HDFC', 'ICICI', 'Razorpay', 'Stripe'])
     txn.audit = [
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Webhook received: payment.failed — {reason} (Gateway: {gateway})", result="fail", strategy="Detection", cost_inr=0.0),
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
-        AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
+        AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Webhook received: payment.failed — {reason} (Gateway: {gateway})", result="fail", strategy="Detection", cost_inr=0.0),
+        AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+        AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
     ]
 
     if txn.potential < config.min_recovery_score:
@@ -510,9 +533,9 @@ async def simulate_failure(background_tasks: BackgroundTasks):
         )[0]
 
     if txn.status == RecoveryStatus.RECOVERED:
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully via {method}", result="success", strategy=txn.strategy, cost_inr=2.50))
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action=f"₹{txn.amount} recovered successfully via {method}", result="success", strategy=txn.strategy, cost_inr=2.50))
     elif txn.status == RecoveryStatus.FAILED:
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
 
     transactions_db[txn.id] = txn
     
@@ -534,7 +557,7 @@ async def auto_resolve_mock(txn_id: str):
         channel_name = channels[0] if channels else "system_retry"
         
         txn.audit.append(AuditEntry(
-            timestamp=datetime.utcnow(), 
+            timestamp=datetime.now(timezone.utc), 
             action=f"Attempt #1: {channel_name.replace('_', ' ').title()} sent", 
             result="info",
             strategy=channel_name,
@@ -542,12 +565,12 @@ async def auto_resolve_mock(txn_id: str):
         ))
         
         # Simulate the outcome
-        txn.status = random.choices([RecoveryStatus.RECOVERED, RecoveryStatus.FAILED], weights=[85, 15])[0]
+        txn.status = random.choices([RecoveryStatus.RECOVERED, RecoveryStatus.FAILED], weights=[75,25])[0]
         result_str = "success" if txn.status == RecoveryStatus.RECOVERED else "fail"
         action_str = f"₹{txn.amount} recovered successfully (Auto)" if txn.status == RecoveryStatus.RECOVERED else "Max retries exhausted (Auto)"
         
         # Add outcome to audit 1 second later to show sequence
-        txn.audit.append(AuditEntry(timestamp=datetime.utcnow() + timedelta(seconds=1), action=action_str, result=result_str, strategy=channel_name, cost_inr=2.50 if txn.status == RecoveryStatus.RECOVERED else 5.00))
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc) + timedelta(seconds=1), action=action_str, result=result_str, strategy=channel_name, cost_inr=2.50 if txn.status == RecoveryStatus.RECOVERED else 5.00))
 
 @app.post("/transactions/{txn_id}/recover")
 async def trigger_recovery(txn_id: str, background_tasks: BackgroundTasks):
@@ -646,13 +669,130 @@ async def get_merchant_config(merchant_id: str):
 
 # ======================== HEALTH CHECK ========================
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "RecoverFlow AI", "version": "1.0.0"}
+@app.get("/metrics")
+async def get_metrics() -> DashboardMetrics:
+    """Get high-level recovery metrics."""
+    revenue_at_risk = 0.0
+    money_recovered = 0.0
+    active_cases = 0
+    recovered_cases = 0
+    failed_cases = 0
 
-# ======================== SEED DATA ========================
+    for txn in transactions_db.values():
+        if txn.status in (RecoveryStatus.PENDING, RecoveryStatus.RETRYING, RecoveryStatus.MANUAL_REVIEW):
+            active_cases += 1
+            revenue_at_risk += txn.amount
+        elif txn.status == RecoveryStatus.RECOVERED:
+            recovered_cases += 1
+            money_recovered += txn.amount
+        elif txn.status == RecoveryStatus.FAILED:
+            failed_cases += 1
+            revenue_at_risk += txn.amount
 
-@app.on_event("startup")
+    total_cases = active_cases + recovered_cases + failed_cases
+    recovery_rate = (recovered_cases / (recovered_cases + failed_cases) * 100.0) if (recovered_cases + failed_cases) > 0 else 0.0
+    
+    return DashboardMetrics(
+        revenue_at_risk=revenue_at_risk,
+        money_recovered=money_recovered,
+        recovery_rate=recovery_rate,
+        avg_recovery_time_hours=2.5,
+        active_cases=active_cases,
+        recovered_cases=recovered_cases,
+        failed_cases=failed_cases
+    )
+
+# ======================== WEBHOOKS (LIVE AI TRIGGER) ========================
+
+@app.post("/webhooks/razorpay")
+async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receives live events from Razorpay, validates the signature, 
+    and triggers the AI agent to recover failed payments.
+    """
+    try:
+        body = await request.body()
+        signature = request.headers.get("X-Razorpay-Signature", "")
+        
+        # Verify the webhook signature securely using Razorpay's official SDK
+        if not RAZORPAY_WEBHOOK_SECRET:
+            raise HTTPException(status_code=500, detail="Webhook secret is not configured on the server.")
+            
+        try:
+            rzp_client.utility.verify_webhook_signature(
+                body.decode('utf-8'), 
+                signature, 
+                RAZORPAY_WEBHOOK_SECRET
+            )
+        except razorpay.errors.SignatureVerificationError:
+            raise HTTPException(status_code=400, detail="Invalid signature")
+
+        payload = await request.json()
+        event = payload.get("event")
+        
+        # Only process payment.failed events for now
+        if event == "payment.failed":
+            payment_entity = payload["payload"]["payment"]["entity"]
+            
+            # Map Razorpay's real data to our AI Transaction model
+            amount_inr = int(payment_entity.get("amount", 0) / 100) # Razorpay sends amounts in paise
+            error_reason = payment_entity.get("error_description", "Unknown error")
+            method = payment_entity.get("method", "Unknown")
+            txn_id = payment_entity.get("id")
+            
+            # Use real historical context if available, otherwise mock for demo
+            customer_history = round(random.random(), 2) # In reality, fetch from DB
+            customer_ltv = random.randint(5000, 200000) # In reality, fetch from DB
+            
+            txn = Transaction(
+                id=txn_id,
+                amount=amount_inr,
+                reason=error_reason,
+                method=method,
+                ltv=customer_ltv,
+                history=customer_history
+            )
+            
+            # Let the AI Agent classify, score, and strategize
+            # Since Razorpay test errors are identical, we randomize the bucket to show different strategies
+            txn.bucket = random.choice(list(FailureBucket))
+            score_result = score_recovery_potential(txn)
+            txn.potential = score_result["score"]
+            
+            config = merchant_configs.get("merchant_default", MerchantConfig())
+            strategy = select_strategy(txn.potential, txn.bucket, txn.method, config)
+            txn.strategy = strategy["action"]
+            
+            # Build the rich audit trail
+            gateway = payment_entity.get("gateway", "Razorpay")
+            txn.audit = [
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Live Webhook received: payment.failed — {error_reason} (Gateway: {gateway})", result="fail", strategy="Detection", cost_inr=0.0),
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Selected strategy: {txn.strategy}", result="info", strategy="Strategy Router", cost_inr=0.0),
+            ]
+            
+            if txn.potential < config.min_recovery_score:
+                txn.status = RecoveryStatus.MANUAL_REVIEW
+            else:
+                txn.status = RecoveryStatus.PENDING
+                
+            transactions_db[txn.id] = txn
+            
+            # Optionally trigger background auto-recovery logic here
+            if txn.status == RecoveryStatus.PENDING:
+                background_tasks.add_task(auto_resolve_mock, txn.id)
+                
+            print(f"[LIVE WEBHOOK] Processed failed payment {txn.id} for ₹{amount_inr}")
+            return {"status": "success"}
+            
+        return {"status": "ignored"}
+        
+    except Exception as e:
+        print(f"[WEBHOOK ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ======================== ML HEURISTICS (MOCK) ========================
+
 async def seed_data():
     """Seed demo data on startup."""
     demo_txns = [
@@ -687,15 +827,15 @@ async def seed_data():
         txn.status = RecoveryStatus(statuses[i])
 
         txn.audit = [
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Webhook received: payment.failed — {data['reason']} (Gateway: HDFC)", result="fail", strategy="Detection", cost_inr=0.0),
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
-            AuditEntry(timestamp=datetime.utcnow(), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
+            AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Webhook received: payment.failed — {data['reason']} (Gateway: HDFC)", result="fail", strategy="Detection", cost_inr=0.0),
+            AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+            AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Selected strategy: {txn.strategy} (Optimiser routing)", result="info", strategy="Strategy Router", cost_inr=0.0),
         ]
 
         if txn.status == RecoveryStatus.RECOVERED:
-            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action=f"₹{txn.amount} recovered successfully", result="success", strategy=txn.strategy, cost_inr=2.50))
+            txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action=f"₹{txn.amount} recovered successfully", result="success", strategy=txn.strategy, cost_inr=2.50))
         elif txn.status == RecoveryStatus.FAILED:
-            txn.audit.append(AuditEntry(timestamp=datetime.utcnow(), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
+            txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
 
         transactions_db[txn.id] = txn
 
