@@ -26,6 +26,7 @@ router = APIRouter(tags=["webhooks"])
 
 
 @router.post("/webhooks/razorpay")
+@router.post("/webhooks/razorpay/")
 async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Receives live events from Razorpay, validates the signature,
@@ -106,6 +107,28 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             print(f"[LIVE WEBHOOK] Processed failed payment {txn.id} for ₹{amount_inr}")
             return {"status": "success"}
 
+        elif event == "payment_link.paid":
+            pl_entity = payload["payload"]["payment_link"]["entity"]
+            
+            # Find the transaction using reference_id or notes
+            txn_id = pl_entity.get("reference_id")
+            if not txn_id:
+                txn_id = pl_entity.get("notes", {}).get("txn_id")
+                
+            if txn_id and txn_id in transactions_db:
+                txn = transactions_db[txn_id]
+                txn.status = RecoveryStatus.RECOVERED
+                txn.audit.append(
+                    AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"Payment Link Paid! Revenue recovered: ₹{txn.amount}",
+                        result="success",
+                        cost_inr=0.0
+                    )
+                )
+                print(f"[LIVE WEBHOOK] Payment link paid for {txn.id}. Recovered!")
+                return {"status": "success"}
+                
         return {"status": "ignored"}
 
     except HTTPException:

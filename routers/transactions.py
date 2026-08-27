@@ -4,6 +4,7 @@ and list/inspect transactions.
 """
 
 import random
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -13,7 +14,8 @@ from models import AuditEntry, MerchantConfig, RecoveryStatus, Transaction
 from store import merchant_configs, transactions_db
 from scoring import classify_failure, score_recovery_potential
 from strategy import select_strategy
-from executor import auto_resolve_mock, process_recovery
+from executor import auto_resolve_mock, process_recovery, fail_expired_mock_link
+from config import rzp_client
 
 router = APIRouter(tags=["transactions"])
 
@@ -59,9 +61,10 @@ async def simulate_failure(background_tasks: BackgroundTasks):
                 RecoveryStatus.RECOVERED,
                 RecoveryStatus.RETRYING,
                 RecoveryStatus.PENDING,
-                RecoveryStatus.FAILED
+                RecoveryStatus.FAILED,
+                RecoveryStatus.WAITING_FOR_CUSTOMER
             ],
-            weights=[60, 25, 10, 10],
+            weights=[50, 20, 10, 10, 10],
             k=1
         )[0]
 
@@ -69,12 +72,35 @@ async def simulate_failure(background_tasks: BackgroundTasks):
         txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action=f"₹{txn.amount} recovered successfully via {method}", result="success", strategy=txn.strategy, cost_inr=2.50))
     elif txn.status == RecoveryStatus.FAILED:
         txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
+    elif txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER:
+        fake_link = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
+        
+        # Try to generate a REAL link if keys are configured!
+        if rzp_client:
+            try:
+                pl = rzp_client.payment_link.create({
+                    "amount": txn.amount * 100,
+                    "currency": "INR",
+                    "description": "RecoverFlow AI Demo Recovery",
+                    "reference_id": txn.id,
+                    "expire_by": int(time.time()) + 960, # Razorpay requires at least 15 mins (using 16 mins to be safe)
+                    "notes": {"txn_id": txn.id}
+                })
+                fake_link = pl.get("short_url", fake_link)
+                txn.payment_link_id = pl.get("id")
+            except Exception as e:
+                print(f"[SIMULATOR] Could not create real link, falling back to mock: {e}")
+
+        txn.payment_link_url = fake_link
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Sent Razorpay Payment Link", result="info", strategy=txn.strategy, cost_inr=0.50, link_url=fake_link))
 
     transactions_db[txn.id] = txn
 
     # Auto-resolve pending/retrying cases after a few seconds so revenue at risk doesn't climb infinitely
     if txn.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING]:
         background_tasks.add_task(auto_resolve_mock, txn.id)
+    elif txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER:
+        background_tasks.add_task(fail_expired_mock_link, txn.id)
 
     return {"status": txn.status.value, "txn_id": txn.id, "amount": txn.amount}
 
@@ -95,10 +121,40 @@ async def trigger_recovery(txn_id: str, background_tasks: BackgroundTasks):
     return {"status": "recovery_started", "txn_id": txn_id}
 
 
+
+
+def sync_payment_link(txn: Transaction):
+    """Smart Sync: Checks Razorpay for live payment link status."""
+    if txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER and txn.payment_link_id and rzp_client:
+        try:
+            pl = rzp_client.payment_link.fetch(txn.payment_link_id)
+            status = pl.get("status")
+            if status == "paid":
+                txn.status = RecoveryStatus.RECOVERED
+                txn.audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Payment Link Paid! Revenue recovered: ₹{txn.amount}",
+                    result="success",
+                    cost_inr=0.0
+                ))
+            elif status in ["expired", "cancelled"]:
+                txn.status = RecoveryStatus.FAILED
+                txn.audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Payment Link {status}.",
+                    result="fail",
+                    cost_inr=0.0
+                ))
+        except Exception as e:
+            print(f"Failed to sync link {txn.payment_link_id}: {e}")
+
 @router.get("/transactions")
-async def list_transactions(status: Optional[str] = None, limit: int = 50):
+def list_transactions(status: Optional[str] = None, limit: int = 50):
     """List all transactions with optional filtering."""
     txns = list(transactions_db.values())
+    for t in txns:
+        sync_payment_link(t)
+        
     if status:
         txns = [t for t in txns if t.status.value == status]
     txns = sorted(txns, key=lambda x: x.created_at, reverse=True)[:limit]
@@ -106,9 +162,11 @@ async def list_transactions(status: Optional[str] = None, limit: int = 50):
 
 
 @router.get("/transactions/{txn_id}")
-async def get_transaction(txn_id: str):
+def get_transaction(txn_id: str):
     """Get detailed transaction with audit trail."""
     txn = transactions_db.get(txn_id)
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    sync_payment_link(txn)
     return txn

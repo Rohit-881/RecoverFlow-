@@ -21,6 +21,7 @@ class RecoveryStatus(str, Enum):
     RECOVERED = "recovered"
     FAILED = "failed"
     MANUAL_REVIEW = "manual_review"
+    WAITING_FOR_CUSTOMER = "waiting_for_customer"
 
 
 class AuditEntry(BaseModel):
@@ -29,6 +30,7 @@ class AuditEntry(BaseModel):
     result: str  # "success", "fail", "info", "warn"
     cost_inr: float = 0.0
     strategy: Optional[str] = None
+    link_url: Optional[str] = None
 
 
 class Transaction(BaseModel):
@@ -49,6 +51,8 @@ class Transaction(BaseModel):
     audit: List[AuditEntry] = []
     attempts_made: int = 0
     cost_accrued: float = 0.0
+    payment_link_id: Optional[str] = None
+    payment_link_url: Optional[str] = None
 
 
 class MerchantConfig(BaseModel):

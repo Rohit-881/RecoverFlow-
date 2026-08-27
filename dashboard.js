@@ -94,7 +94,8 @@
       tbody.innerHTML = displayData.map((t) => {
         const idx = transactions.indexOf(t);
         const potColor = t.potential > 70 ? 'var(--positive)' : t.potential > 40 ? 'var(--warning)' : 'var(--danger)';
-    const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : 'text-secondary';
+    const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : t.status === 'waiting_for_customer' ? 'chart-4' : 'text-secondary';
+    const displayStatus = t.status.replace(/_/g, ' ');
     return `
     <tr onclick="showDetail(${idx})" style="cursor:pointer;">
         <td><code>${t.id}</code></td>
@@ -105,7 +106,7 @@
             <div class="rf-recovery-score">${t.potential}% potential</div>
         </td>
         <td><span class="rf-strategy">${t.strategy}</span></td>
-        <td><span class="rf-status ${t.status}"><span class="rf-dot" style="background: var(--${statusColor});"></span>${t.status}</span></td>
+        <td><span class="rf-status ${t.status}"><span class="rf-dot" style="background: var(--${statusColor});"></span>${displayStatus}</span></td>
         <td><button class="rf-action-btn" onclick="event.stopPropagation();showDetail(${idx})">View AI decision</button></td>
     </tr>
       `}).join('');
@@ -148,8 +149,17 @@
     <div class="rf-detail-item"><div class="rf-detail-item-label">Customer LTV</div><div class="rf-detail-item-value">₹${selectedTx.ltv.toLocaleString('en-IN')}</div></div>
     <div class="rf-detail-item"><div class="rf-detail-item-label">Payment method</div><div class="rf-detail-item-value">${selectedTx.method}</div></div>
     <div class="rf-detail-item"><div class="rf-detail-item-label">Selected strategy</div><div class="rf-detail-item-value">${selectedTx.strategy}</div></div>
-    <div class="rf-detail-item"><div class="rf-detail-item-label">Max attempts</div><div class="rf-detail-item-value">${selectedTx.potential > 60 ? 3 : selectedTx.potential > 30 ? 2 : 1}</div></div>
+    <div class="rf-detail-item"><div class="rf-detail-item-label">Attempts Made</div><div class="rf-detail-item-value">${selectedTx.attempts_made !== undefined ? selectedTx.attempts_made : (selectedTx.potential > 60 ? '1/3' : '1/2')}</div></div>
     `;
+    
+    // If there is an active payment link, show a big pay now button
+    if (selectedTx.payment_link_url && selectedTx.status === 'waiting_for_customer') {
+        document.getElementById('detailGrid').innerHTML += `
+        <div style="grid-column: 1 / -1; margin-top: 10px;">
+            <a href="${selectedTx.payment_link_url}" target="_blank" style="display:inline-block; padding:8px 16px; background:var(--primary); color:white; border-radius:6px; text-decoration:none; font-weight:600;">🔗 Pay Now (Demo)</a>
+        </div>
+        `;
+    }
       document.getElementById('auditTimeline').innerHTML = selectedTx.audit.map(a => {
         let dateStr = 'Now';
         if (a.timestamp) {
@@ -160,12 +170,12 @@
         } else if (a.time) {
             dateStr = a.time.replace(', ', '<br>');
         }
-        
+        let linkHtml = a.link_url ? `<br><a href="${a.link_url}" target="_blank" style="color:var(--primary); text-decoration:underline;">🔗 Open Link</a>` : '';
         return `
     <div class="rf-audit-item">
         <div class="rf-audit-time" style="font-size:12px; color:var(--text-secondary); width:60px; line-height:1.2;">${dateStr}</div>
         <div>
-            <div class="rf-audit-action">${a.action}</div>
+            <div class="rf-audit-action">${a.action}${linkHtml}</div>
             <div class="rf-audit-result ${a.result === 'success' ? 'success' : a.result === 'fail' ? 'fail' : a.result === 'warn' ? 'warn' : ''}">${a.result === 'success' ? '✓ Success' : a.result === 'fail' ? '✗ Failed' : a.result === 'warn' ? '⚠ Warning' : 'ℹ Info'}</div>
         </div>
     </div>

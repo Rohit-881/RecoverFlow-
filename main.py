@@ -37,10 +37,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+
 app.include_router(webhooks.router)
 app.include_router(transactions.router)
 app.include_router(metrics.router)
 app.include_router(merchants.router)
+
+# Mount current directory to serve dashboard.html
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 
 if __name__ == "__main__":

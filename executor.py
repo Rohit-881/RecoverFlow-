@@ -8,12 +8,14 @@ after a request has already returned a response to the client.
 
 import asyncio
 import random
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from models import AuditEntry, RecoveryResult, RecoveryStatus, FailureBucket, MerchantConfig, Transaction
 from store import transactions_db, merchant_configs
 from strategy import select_strategy
+from config import rzp_client
 
 
 async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: MerchantConfig) -> RecoveryResult:
@@ -44,43 +46,112 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
         action_name = strategy["action"]
         channel = strategy["channels"][min(attempts - 1, len(strategy["channels"]) - 1)] if strategy["channels"] else "smart_retry"
 
-        # Simulate execution
-        await asyncio.sleep(0.5)  # Simulate API call latency
+        # If strategy uses payment links, generate a real or mock one!
+        if channel == "payment_link":
+            link_created = False
+            if rzp_client:
+                try:
+                    # Create a real Razorpay payment link
+                    pl = rzp_client.payment_link.create({
+                        "amount": txn.amount * 100,  # paise
+                        "currency": txn.currency,
+                        "description": "RecoverFlow AI Payment Recovery",
+                        "reference_id": txn.id,
+                        "notify": {
+                            "sms": True,
+                            "email": True
+                        },
+                        "reminder_enable": True,
+                        "expire_by": int(time.time()) + 960, # Razorpay requires at least 15 mins
+                        "notes": {
+                            "txn_id": txn.id
+                        }
+                    })
+                    txn.payment_link_id = pl.get("id")
+                    txn.payment_link_url = pl.get("short_url")
 
-        cost = strategy.get("cost_per_attempt", 2.5)
-        cost_accrued += cost
+                    cost = 0.50  # small cost for link generation & SMS
+                    cost_accrued += cost
+                    
+                    audit.append(AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"Attempt #{attempts}: Sent real Razorpay Payment Link via {channel}",
+                        result="info",
+                        cost_inr=cost,
+                        link_url=txn.payment_link_url
+                    ))
+                    link_created = True
+                except Exception as e:
+                    audit.append(AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"Attempt #{attempts}: Failed to create real payment link — {str(e)}",
+                        result="fail",
+                        cost_inr=0.0,
+                    ))
+                    # If it errors, we will fall back to creating a mock link below!
+                    
+            if not link_created:
+                # Mock Mode or Fallback
+                txn.payment_link_url = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
+                cost = 0.0
+                audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Attempt #{attempts}: Sent simulated Payment Link via {channel}",
+                    result="info",
+                    cost_inr=cost,
+                    link_url=txn.payment_link_url
+                ))
 
-        # Simulate recovery outcome (65% success rate for demo)
-        recovered = random.random() > 0.35
-
-        if recovered:
-            audit.append(AuditEntry(
-                timestamp=datetime.now(timezone.utc),
-                action=f"Attempt #{attempts}: {action_name} via {channel} — ₹{txn.amount} recovered",
-                result="success",
-                cost_inr=cost,
-            ))
             time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()
+            
+            # Pause the AI loop here, wait for customer to pay!
             return RecoveryResult(
                 txn_id=txn.id,
-                status=RecoveryStatus.RECOVERED,
-                amount_recovered=txn.amount,
+                status=RecoveryStatus.WAITING_FOR_CUSTOMER,
+                amount_recovered=0,
                 attempts_used=attempts,
                 total_cost=cost_accrued,
                 audit=audit,
                 time_taken_seconds=time_taken,
             )
         else:
-            audit.append(AuditEntry(
-                timestamp=datetime.now(timezone.utc),
-                action=f"Attempt #{attempts}: {action_name} via {channel} — failed",
-                result="fail",
-                cost_inr=cost,
-            ))
+            # Simulate execution for other channels
+            await asyncio.sleep(0.5)  # Simulate API call latency
 
-            # Stop early on hard failures
-            if txn.bucket == FailureBucket.HARD and attempts >= 1:
-                break
+            cost = strategy.get("cost_per_attempt", 2.5)
+            cost_accrued += cost
+
+            # Simulate recovery outcome (65% success rate for demo)
+            recovered = random.random() > 0.35
+
+            if recovered:
+                audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Attempt #{attempts}: {action_name} via {channel} — ₹{txn.amount} recovered",
+                    result="success",
+                    cost_inr=cost,
+                ))
+                time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()
+                return RecoveryResult(
+                    txn_id=txn.id,
+                    status=RecoveryStatus.RECOVERED,
+                    amount_recovered=txn.amount,
+                    attempts_used=attempts,
+                    total_cost=cost_accrued,
+                    audit=audit,
+                    time_taken_seconds=time_taken,
+                )
+            else:
+                audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Attempt #{attempts}: {action_name} via {channel} — failed",
+                    result="fail",
+                    cost_inr=cost,
+                ))
+
+                # Stop early on hard failures
+                if txn.bucket == FailureBucket.HARD and attempts >= 1:
+                    break
 
     # Max attempts exhausted or cost exceeded
     if cost_accrued >= config.max_cost_per_recovery:
@@ -130,7 +201,10 @@ async def process_recovery(txn_id: str, strategy: Dict[str, Any], config: Mercha
 
 async def auto_resolve_mock(txn_id: str):
     """Simulates the AI resolving the case in the background after some time."""
-    await asyncio.sleep(12)  # Wait 12 seconds
+    try:
+        await asyncio.sleep(12)  # Wait 12 seconds
+    except asyncio.CancelledError:
+        return
     txn = transactions_db.get(txn_id)
     if txn and txn.status in [RecoveryStatus.PENDING, RecoveryStatus.RETRYING]:
         # Log the attempt method based on the strategy
@@ -154,3 +228,22 @@ async def auto_resolve_mock(txn_id: str):
 
         # Add outcome to audit 1 second later to show sequence
         txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc) + timedelta(seconds=1), action=action_str, result=result_str, strategy=channel_name, cost_inr=2.50 if txn.status == RecoveryStatus.RECOVERED else 5.00))
+
+async def fail_expired_mock_link(txn_id: str):
+    """Fails a mock payment link if the user didn't pay it in 5 minutes (mock expiry)."""
+    try:
+        await asyncio.sleep(300) # Wait 5 minutes
+    except asyncio.CancelledError:
+        return
+    txn = transactions_db.get(txn_id)
+    if txn and txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER:
+        txn.status = RecoveryStatus.FAILED
+        txn.audit.append(AuditEntry(
+            timestamp=datetime.now(timezone.utc),
+            action="Payment link expired after 5 minutes.",
+            result="fail",
+            cost_inr=0.0
+        ))
+        print(f"[RECOVERY] {txn_id} payment link expired!")
+
+
