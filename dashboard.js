@@ -246,8 +246,9 @@
     try {
         const response = await fetch('https://recoverflow-backened.onrender.com/transactions/simulate', { method: 'POST' });
         if (!response.ok) throw new Error("API error");
+        const simResult = await response.json();
         await fetchTransactions(); // Refresh the list from the backend
-        newTx = transactions[0]; // The newest one is at the top
+        newTx = transactions.find(t => t.id === simResult.txn_id) || transactions[0];
     } catch (e) {
         log(`Failed to connect to backend AI`, 'error');
         btn.disabled = false;

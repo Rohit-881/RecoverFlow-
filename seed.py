@@ -52,8 +52,10 @@ async def seed_data():
         ]
 
         if txn.status == RecoveryStatus.RECOVERED:
+            txn.attempts_made = 1
             txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action=f"₹{txn.amount} recovered successfully", result="success", strategy=txn.strategy, cost_inr=2.50))
         elif txn.status == RecoveryStatus.FAILED:
+            txn.attempts_made = 3
             txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
 
         transactions_db[txn.id] = txn

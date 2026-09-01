@@ -219,6 +219,9 @@ async def auto_resolve_mock(txn_id: str):
         txn.status = random.choices([RecoveryStatus.RECOVERED, RecoveryStatus.FAILED], weights=[75, 25])[0]
         result_str = "success" if txn.status == RecoveryStatus.RECOVERED else "fail"
         action_str = f"₹{txn.amount} recovered successfully (Auto)" if txn.status == RecoveryStatus.RECOVERED else "Max retries exhausted (Auto)"
+        
+        # Ensure attempts_made is correctly updated
+        txn.attempts_made = 1 if txn.status == RecoveryStatus.RECOVERED else strategy.get("max_attempts", 3)
 
         # Add outcome to audit 1 second later to show sequence
         txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc) + timedelta(seconds=1), action=action_str, result=result_str, strategy=channel_name, cost_inr=2.50 if txn.status == RecoveryStatus.RECOVERED else 5.00))
