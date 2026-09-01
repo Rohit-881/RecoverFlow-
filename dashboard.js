@@ -164,11 +164,13 @@
             dateStr = a.time.replace(', ', '<br>');
         }
         let linkHtml = a.link_url ? `<br><a href="${a.link_url}" target="_blank" style="color:var(--primary); text-decoration:underline;">🔗 Open Link</a>` : '';
+        let llmHtml = a.llm_message ? `<div style="margin-top:8px; padding:10px; background: rgba(59, 130, 246, 0.05); border-left: 3px solid var(--accent); border-radius: 4px; font-style: italic; color: var(--text-secondary);"><strong>✨ Gemini Generative AI:</strong><br>"${a.llm_message}"</div>` : '';
         return `
     <div class="rf-audit-item">
         <div class="rf-audit-time" style="font-size:12px; color:var(--text-secondary); width:60px; line-height:1.2;">${dateStr}</div>
         <div>
             <div class="rf-audit-action">${a.action}${linkHtml}</div>
+            ${llmHtml}
             <div class="rf-audit-result ${a.result === 'success' ? 'success' : a.result === 'fail' ? 'fail' : a.result === 'warn' ? 'warn' : ''}">${a.result === 'success' ? '✓ Success' : a.result === 'fail' ? '✗ Failed' : a.result === 'warn' ? '⚠ Warning' : 'ℹ Info'}</div>
         </div>
     </div>

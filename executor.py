@@ -9,6 +9,7 @@ after a request has already returned a response to the client.
 import asyncio
 import random
 import time
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
@@ -16,6 +17,29 @@ from models import AuditEntry, RecoveryResult, RecoveryStatus, FailureBucket, Me
 from store import transactions_db, merchant_configs
 from strategy import select_strategy
 from config import rzp_client
+
+def generate_llm_outreach(txn: Transaction) -> str:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return f"Hi there, it looks like your {txn.method} payment for ₹{txn.amount} failed due to a {txn.reason.lower()}. No worries at all! Here is a secure link to complete your payment:"
+        
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        prompt = f"""Write a very short (2 sentence max) SMS message to a customer whose {txn.method} payment of ₹{txn.amount} just failed.
+The failure reason given by the bank was: "{txn.reason}".
+The message should be polite, empathetic, and tell them we generated a new secure link for them to try again.
+Do not include placeholders for the link, just end the message with a colon."""
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"LLM Error: {e}")
+        return f"Hi there, it looks like your {txn.method} payment for ₹{txn.amount} failed due to a {txn.reason.lower()}. No worries at all! Here is a secure link to complete your payment:"
+
 
 
 async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: MerchantConfig) -> RecoveryResult:
@@ -73,12 +97,15 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
                     cost = 0.50  # small cost for link generation & SMS
                     cost_accrued += cost
                     
+                    llm_msg = generate_llm_outreach(txn)
+                    
                     audit.append(AuditEntry(
                         timestamp=datetime.now(timezone.utc),
                         action=f"Attempt #{attempts}: Sent real Razorpay Payment Link via {channel}",
                         result="info",
                         cost_inr=cost,
-                        link_url=txn.payment_link_url
+                        link_url=txn.payment_link_url,
+                        llm_message=llm_msg
                     ))
                     link_created = True
                 except Exception as e:
@@ -94,12 +121,16 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
                 # Mock Mode or Fallback
                 txn.payment_link_url = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
                 cost = 0.0
+                
+                llm_msg = generate_llm_outreach(txn)
+                
                 audit.append(AuditEntry(
                     timestamp=datetime.now(timezone.utc),
                     action=f"Attempt #{attempts}: Sent simulated Payment Link via {channel}",
                     result="info",
                     cost_inr=cost,
-                    link_url=txn.payment_link_url
+                    link_url=txn.payment_link_url,
+                    llm_message=llm_msg
                 ))
 
             time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()

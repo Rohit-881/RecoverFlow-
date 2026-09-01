@@ -31,6 +31,7 @@ class AuditEntry(BaseModel):
     cost_inr: float = 0.0
     strategy: Optional[str] = None
     link_url: Optional[str] = None
+    llm_message: Optional[str] = None
 
 
 class Transaction(BaseModel):
