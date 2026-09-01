@@ -297,26 +297,18 @@
 
     if (recovered) {
         log(`Recovery successful! ₹${newTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
-    newTx.status = 'recovered';
-    newTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${newTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${newTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${newTx.amount.toLocaleString('en-IN')} recovered successfully via ${newTx.method}`, result: 'success', strategy: strategy, cost_inr: 2.50 }
-    ];
+        // Fetch latest transaction from backend to get the REAL audit trail
+        const latestTx = await fetch('http://localhost:8000/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
+        newTx = latestTx;
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = '₹' + newTx.amount.toLocaleString('en-IN') + ' recovered';
     document.getElementById('simResultText').style.color = 'var(--positive)';
     document.getElementById('simResultDetail').textContent = `Strategy: ${strategy} | Score: ${score}% | Attempts: 1/1`;
       } else {
         log(`Recovery failed.`, 'error');
-    newTx.status = 'failed';
-    newTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${newTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${newTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `All attempts exhausted`, result: 'fail', strategy: strategy, cost_inr: 5.00 }
-    ];
+        // Fetch latest transaction from backend to get the REAL audit trail
+        const latestTx = await fetch('http://localhost:8000/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
+        newTx = latestTx;
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = 'Recovery failed';
     document.getElementById('simResultText').style.color = 'var(--danger)';

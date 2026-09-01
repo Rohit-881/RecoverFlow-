@@ -14,7 +14,7 @@ from models import AuditEntry, MerchantConfig, RecoveryStatus, Transaction
 from store import merchant_configs, transactions_db
 from scoring import classify_failure, score_recovery_potential
 from strategy import select_strategy
-from executor import auto_resolve_mock, process_recovery, fail_expired_mock_link
+from executor import auto_resolve_mock, process_recovery, fail_expired_mock_link, generate_llm_outreach
 from config import rzp_client
 
 router = APIRouter(tags=["transactions"])
@@ -92,7 +92,8 @@ async def simulate_failure(background_tasks: BackgroundTasks):
                 print(f"[SIMULATOR] Could not create real link, falling back to mock: {e}")
 
         txn.payment_link_url = fake_link
-        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Sent Razorpay Payment Link", result="info", strategy=txn.strategy, cost_inr=0.50, link_url=fake_link))
+        llm_msg = generate_llm_outreach(txn)
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Sent Razorpay Payment Link", result="info", strategy=txn.strategy, cost_inr=0.50, link_url=fake_link, llm_message=llm_msg))
 
     transactions_db[txn.id] = txn
 
