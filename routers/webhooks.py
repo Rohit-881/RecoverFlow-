@@ -61,6 +61,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             error_reason = payment_entity.get("error_description", "Unknown error")
             method = payment_entity.get("method", "Unknown")
             txn_id = payment_entity.get("id")
+            subscription_id = payment_entity.get("subscription_id")
 
             # Use real historical context if available, otherwise mock for demo
             customer_history = round(random.random(), 2)  # In reality, fetch from DB
@@ -76,8 +77,10 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             )
 
             # Let the AI Agent classify, score, and strategize
-            # Since Razorpay test errors are identical, we randomize the bucket to show different strategies
-            txn.bucket = random.choice(list(FailureBucket))
+            if subscription_id:
+                txn.bucket = FailureBucket.SUBSCRIPTION_FAILED
+            else:
+                txn.bucket = random.choice(list(FailureBucket))
             score_result = score_recovery_potential(txn)
             txn.potential = score_result["score"]
 
@@ -128,6 +131,38 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
                 )
                 print(f"[LIVE WEBHOOK] Payment link paid for {txn.id}. Recovered!")
                 return {"status": "success"}
+
+        elif event == "invoice.expired":
+            invoice_entity = payload["payload"]["invoice"]["entity"]
+            amount_inr = int(invoice_entity.get("amount", 0) / 100)
+            txn_id = invoice_entity.get("id")
+            
+            txn = Transaction(
+                id=txn_id,
+                amount=amount_inr,
+                reason="Invoice Expired (Net-30 unpaid)",
+                method="Invoice",
+                ltv=100000,
+                history=0.8,
+                bucket=FailureBucket.B2B_OVERDUE
+            )
+            
+            score_result = score_recovery_potential(txn)
+            txn.potential = score_result["score"]
+            config = merchant_configs.get("merchant_default", MerchantConfig())
+            strategy = select_strategy(txn.potential, txn.bucket, txn.method, config)
+            txn.strategy = strategy["action"]
+            
+            txn.audit = [
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Live Webhook received: invoice.expired", result="fail", strategy="Detection", cost_inr=0.0),
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Classified failure: {txn.bucket.value} | Scored recovery potential: {txn.potential}%", result="info", strategy="AI Scoring", cost_inr=0.0),
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Selected strategy: {txn.strategy}", result="info", strategy="Strategy Router", cost_inr=0.0),
+            ]
+            txn.status = RecoveryStatus.PENDING
+            transactions_db[txn.id] = txn
+            background_tasks.add_task(auto_resolve_mock, txn.id)
+            print(f"[LIVE WEBHOOK] Processed B2B expired invoice {txn.id}")
+            return {"status": "success"}
                 
         return {"status": "ignored"}
 
@@ -136,3 +171,53 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         print(f"[WEBHOOK ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+from pydantic import BaseModel
+class InboundMessage(BaseModel):
+    txn_id: str
+    message: str
+
+@router.post("/webhooks/inbound-message")
+async def inbound_message(payload: InboundMessage):
+    """Mock webhook to receive SMS replies and extract Promise-to-Pay dates using Gemini."""
+    txn = transactions_db.get(payload.txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    txn.audit.append(AuditEntry(
+        timestamp=datetime.now(timezone.utc),
+        action=f"Received inbound SMS: '{payload.message}'",
+        result="info",
+        cost_inr=0.0
+    ))
+    
+    import os
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            prompt = f"Extract a promise date from this message: '{payload.message}'. If they promise to pay on a specific date or day, return ONLY that date in YYYY-MM-DD format based on today ({datetime.now().strftime('%Y-%m-%d')}). If no date is promised, return 'NONE'."
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            extracted = response.text.strip()
+            
+            if extracted != "NONE" and len(extracted) == 10:
+                try:
+                    promise_date = datetime.strptime(extracted, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    txn.promise_date = promise_date
+                    txn.status = RecoveryStatus.PROMISE_TO_PAY
+                    txn.audit.append(AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"AI extracted promise date: {extracted}. Pausing recovery until then.",
+                        result="success",
+                        strategy="NLP Parser",
+                        cost_inr=0.0
+                    ))
+                    print(f"[NLP] Parsed promise date: {extracted} for {txn.id}")
+                    return {"status": "promise_logged", "date": extracted}
+                except ValueError:
+                    pass
+        except Exception as e:
+            print(f"[NLP ERROR] {e}")
+            
+    return {"status": "message_logged", "note": "No promise date detected or API error."}

@@ -16,6 +16,8 @@ FAILURE_BUCKETS = {
     "hard": ["invalid_card", "expired_card", "cancelled_mandate", "fraud_block", "stolen_card"],
     "customer_action": ["insufficient_funds", "incorrect_otp", "incorrect_cvv", "upi_declined"],
     "checkout_dropoff": ["checkout_abandoned", "payment_page_exit"],
+    "subscription_failed": ["subscription_mandate_fail"],
+    "b2b_overdue": ["invoice_expired"],
 }
 
 # Load the machine learning model once on startup
@@ -61,7 +63,9 @@ def score_recovery_potential(txn: Transaction) -> Dict[str, Any]:
         FailureBucket.SOFT: 0, 
         FailureBucket.CUSTOMER_ACTION: 1, 
         FailureBucket.CHECKOUT_DROPOFF: 2, 
-        FailureBucket.HARD: 3
+        FailureBucket.HARD: 3,
+        FailureBucket.SUBSCRIPTION_FAILED: 4,
+        FailureBucket.B2B_OVERDUE: 5
     }
     bucket_val = bucket_mapping.get(txn.bucket, 3)
     

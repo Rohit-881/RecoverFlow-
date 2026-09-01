@@ -26,7 +26,19 @@ def generate_llm_outreach(txn: Transaction) -> str:
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        prompt = f"""Write a very short (2 sentence max) SMS message to a customer whose {txn.method} payment of ₹{txn.amount} just failed.
+        
+        if txn.bucket == FailureBucket.B2B_OVERDUE:
+            prompt = f"""Write a short, formal, and professional B2B email to a client whose invoice payment of ₹{txn.amount} has expired or is overdue.
+The reason given by the system was: "{txn.reason}".
+The message should politely request immediate payment and mention that we have attached a secure payment link to settle the balance.
+Do not include placeholders for the link or signature, just end the message with a colon."""
+        elif txn.bucket == FailureBucket.SUBSCRIPTION_FAILED:
+            prompt = f"""Write a short (2 sentence) email or SMS to a customer whose subscription auto-renewal of ₹{txn.amount} just failed.
+The bank's reason: "{txn.reason}".
+The message should politely ask them to update their payment method using the secure link provided to avoid service interruption.
+Do not include placeholders for the link, just end the message with a colon."""
+        else:
+            prompt = f"""Write a very short (2 sentence max) SMS message to a customer whose {txn.method} payment of ₹{txn.amount} just failed.
 The failure reason given by the bank was: "{txn.reason}".
 The message should be polite, empathetic, and tell them we generated a new secure link for them to try again.
 Do not include placeholders for the link, just end the message with a colon."""
@@ -242,5 +254,25 @@ async def fail_expired_mock_link(txn_id: str):
             cost_inr=0.0
         ))
         print(f"[RECOVERY] {txn_id} payment link expired!")
+
+
+async def check_promises_mock():
+    """Mock background job that scans for PROMISE_TO_PAY transactions whose date has arrived."""
+    try:
+        await asyncio.sleep(20)  # Wait 20 seconds to mock a "daily" cron job for demo
+    except asyncio.CancelledError:
+        return
+    for txn_id, txn in transactions_db.items():
+        if txn.status == RecoveryStatus.PROMISE_TO_PAY and txn.promise_date:
+            if datetime.now(timezone.utc) >= txn.promise_date:
+                txn.status = RecoveryStatus.RETRYING
+                txn.audit.append(AuditEntry(
+                    timestamp=datetime.now(timezone.utc),
+                    action=f"Promise date ({txn.promise_date.strftime('%Y-%m-%d')}) reached. Resuming recovery.",
+                    result="info",
+                    strategy="promise_tracker",
+                    cost_inr=0.0
+                ))
+                print(f"[PROMISE TRACKER] Waking up transaction {txn_id}!")
 
 

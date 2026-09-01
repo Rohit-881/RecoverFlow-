@@ -13,6 +13,8 @@ class FailureBucket(str, Enum):
     HARD = "hard"
     CUSTOMER_ACTION = "customer_action"
     CHECKOUT_DROPOFF = "checkout_dropoff"
+    SUBSCRIPTION_FAILED = "subscription_failed"
+    B2B_OVERDUE = "b2b_overdue"
 
 
 class RecoveryStatus(str, Enum):
@@ -22,6 +24,7 @@ class RecoveryStatus(str, Enum):
     FAILED = "failed"
     MANUAL_REVIEW = "manual_review"
     WAITING_FOR_CUSTOMER = "waiting_for_customer"
+    PROMISE_TO_PAY = "promise_to_pay"
 
 
 class AuditEntry(BaseModel):
@@ -54,6 +57,7 @@ class Transaction(BaseModel):
     cost_accrued: float = 0.0
     payment_link_id: Optional[str] = None
     payment_link_url: Optional[str] = None
+    promise_date: Optional[datetime] = None
 
 
 class MerchantConfig(BaseModel):

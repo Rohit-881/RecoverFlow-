@@ -61,6 +61,28 @@ def select_strategy(score: int, bucket: FailureBucket, method: str, config: Merc
             "cost_per_attempt": 0.35,
         }
 
+    if bucket == FailureBucket.SUBSCRIPTION_FAILED:
+        channels = []
+        if config.channels_enabled.get("email"): channels.append("email")
+        if config.channels_enabled.get("sms"): channels.append("sms")
+        return {
+            "action": "dunning_sequence",
+            "max_attempts": min(3, config.max_retries),
+            "timing": "T+1_T+3_T+7",
+            "channels": channels,
+            "cost_per_attempt": 0.50,
+        }
+
+    if bucket == FailureBucket.B2B_OVERDUE:
+        channels = ["email"] if config.channels_enabled.get("email") else []
+        return {
+            "action": "b2b_email_chaser",
+            "max_attempts": min(2, config.max_retries),
+            "timing": "immediate",
+            "channels": channels,
+            "cost_per_attempt": 0.05,
+        }
+
     return {
         "action": "manual_review",
         "max_attempts": 0,
