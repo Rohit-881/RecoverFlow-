@@ -71,9 +71,7 @@ What it does: When you start the server using uvicorn, this function automatical
 
 
 
-Problems =Note: In the current prototype you've built, the HTML file has "hardcoded" (fake) data inside it 
-for the sake of the UI demo. In a fully finished project, the HTML 
-file would use JavaScript to fetch data directly from the Python backend running on port 8000.
+
 
 important part = Right now, what we have built is a dynamic simulation engine, which sits somewhere in the middle.
 
