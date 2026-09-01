@@ -6,7 +6,7 @@
     async function fetchTransactions() {
       try {
         // We assume your FastAPI backend has an endpoint at GET /transactions
-        const response = await fetch('http://localhost:8000/transactions');
+        const response = await fetch('https://recoverflow-backened.onrender.com/transactions');
     if (!response.ok) throw new Error("Network response was not ok");
 
     transactions = await response.json();
@@ -30,7 +30,7 @@
 
     async function renderMetrics() {
       try {
-        const response = await fetch('http://localhost:8000/metrics');
+        const response = await fetch('https://recoverflow-backened.onrender.com/metrics');
     const metrics = await response.json();
 
     document.getElementById('metricRisk').textContent = '₹' + metrics.revenue_at_risk.toLocaleString('en-IN');
