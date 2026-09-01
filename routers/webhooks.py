@@ -93,7 +93,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
                 AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Selected strategy: {txn.strategy}", result="info", strategy="Strategy Router", cost_inr=0.0),
             ]
 
-            if txn.potential < config.min_recovery_score:
+            if txn.potential < config.min_recovery_score or txn.strategy == "manual_review":
                 txn.status = RecoveryStatus.MANUAL_REVIEW
             else:
                 txn.status = RecoveryStatus.PENDING

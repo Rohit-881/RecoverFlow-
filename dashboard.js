@@ -194,11 +194,34 @@
     document.getElementById('tab-' + tab).classList.add('active');
     }
 
-    function updateConfig(key, value) {
+    async function updateConfig(key, value) {
         merchantConfig[key] = parseInt(value);
     const display = key === 'autoRetry' ? (value == 1 ? 'On' : 'Off') : value;
     const suffix = key === 'maxCost' ? '' : key === 'dndStart' || key === 'dndEnd' ? ':00' : '';
     document.getElementById('config' + key.charAt(0).toUpperCase() + key.slice(1)).textContent = display + suffix;
+    
+    // Sync the updated config with the backend
+    const backendConfig = {
+        max_retries: merchantConfig.maxRetries,
+        max_cost_per_recovery: merchantConfig.maxCost,
+        dnd_start_hour: merchantConfig.dndStart,
+        dnd_end_hour: merchantConfig.dndEnd,
+        min_recovery_score: merchantConfig.minScore,
+        auto_retry_soft: merchantConfig.autoRetry === 1,
+        channels_enabled: {
+            smart_retry: true, sms: true, whatsapp: true, email: true, voice_call: true, payment_link: true
+        }
+    };
+    
+    try {
+        await fetch('https://recoverflow-backened.onrender.com/merchants/merchant_default/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(backendConfig)
+        });
+    } catch (e) {
+        console.error('Failed to sync config with backend:', e);
+    }
     }
 
     function log(msg, type = 'info') {
