@@ -15,7 +15,7 @@ from models import AuditEntry, MerchantConfig, RecoveryStatus, Transaction
 from store import merchant_configs, transactions_db
 from scoring import classify_failure, score_recovery_potential
 from strategy import select_strategy
-from executor import auto_resolve_mock, process_recovery, fail_expired_mock_link, generate_llm_outreach
+from executor import auto_resolve_mock, process_recovery, fail_expired_mock_link, generate_llm_outreach, execute_recovery
 from config import rzp_client
 
 router = APIRouter(tags=["transactions"])
@@ -55,30 +55,14 @@ async def simulate_failure(background_tasks: BackgroundTasks):
 
     if txn.potential < config.min_recovery_score:
         txn.status = RecoveryStatus.MANUAL_REVIEW
+        txn.attempts_made = 0
     else:
-        # Heavily favor RECOVERED to showcase a successful AI agent (60% recovered, 25% retrying, 10% pending, 10% failed)
-        txn.status = random.choices(
-            population=[
-                RecoveryStatus.RECOVERED,
-                RecoveryStatus.RETRYING,
-                RecoveryStatus.PENDING,
-                RecoveryStatus.FAILED,
-                RecoveryStatus.WAITING_FOR_CUSTOMER
-            ],
-            weights=[50, 20, 10, 10, 10],
-            k=1
-        )[0]
-
-    if txn.status == RecoveryStatus.RECOVERED:
-        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action=f"₹{txn.amount} recovered successfully via {method}", result="success", strategy=txn.strategy, cost_inr=2.50))
-    elif txn.status == RecoveryStatus.FAILED:
-        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
-    elif txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER:
-        fake_link = f"https://recoverflow-backened.onrender.com/transactions/{txn.id}/pay"
-
-        txn.payment_link_url = fake_link
-        llm_msg = generate_llm_outreach(txn)
-        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Generated secure payment link for customer", result="info", strategy=txn.strategy, cost_inr=0.00, link_url=fake_link, llm_message=llm_msg))
+        # Run the REAL execution engine instead of mocking it!
+        result = await execute_recovery(txn, strategy, config)
+        txn.status = result.status
+        txn.audit = result.audit
+        txn.attempts_made = result.attempts_used
+        txn.cost_accrued = result.total_cost
 
     transactions_db[txn.id] = txn
 
