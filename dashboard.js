@@ -268,6 +268,24 @@
     const strategy = newTx.strategy;
     log(`Selected Strategy: ${strategy}`, 'info');
     await sleep(600);
+    progressFill.style.width = '55%';
+
+    log(`Checking merchant bounds (max retries: ${merchantConfig.maxRetries}, max cost: ₹${merchantConfig.maxCost})...`, 'info');
+    await sleep(400);
+    if (score < merchantConfig.minScore) {
+        log(`Score ${score}% below your threshold (${merchantConfig.minScore}%). Routing to manual review.`, 'warn');
+        progressFill.style.width = '100%';
+        resultPanel.style.display = 'block';
+        document.getElementById('simResultText').textContent = 'Manual review';
+        document.getElementById('simResultText').style.color = 'var(--warning)';
+        document.getElementById('simResultDetail').textContent = `Score ${score}% below merchant threshold of ${merchantConfig.minScore}%`;
+        btn.disabled = false;
+        renderAll();
+        return;
+    }
+    
+    log(`Bounds satisfied. Proceeding with recovery.`, 'success');
+    await sleep(400);
     progressFill.style.width = '70%';
 
     log(`Executing recovery...`, 'info');
