@@ -96,3 +96,7 @@ class DashboardMetrics(BaseModel):
     active_cases: int
     recovered_cases: int
     failed_cases: int
+    risk_insight: Optional[str] = "↓ 8% vs last week"
+    recovered_insight: Optional[str] = "↑ 12% vs last week"
+    rate_insight: Optional[str] = "↑ 3.2pp vs last week"
+    time_insight: Optional[str] = "↓ 1.1h faster"

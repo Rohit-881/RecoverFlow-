@@ -37,6 +37,28 @@
     document.getElementById('metricRecovered').textContent = '₹' + metrics.money_recovered.toLocaleString('en-IN');
     document.getElementById('metricRate').textContent = metrics.recovery_rate + '%';
     document.getElementById('metricTime').textContent = metrics.avg_recovery_time_hours + 'h';
+    
+    // Update AI Insights
+    if (metrics.risk_insight) {
+        const dRisk = document.getElementById('deltaRisk');
+        dRisk.textContent = metrics.risk_insight;
+        dRisk.className = 'rf-metric-delta ' + (metrics.risk_insight.includes('↑') ? 'up' : 'down');
+    }
+    if (metrics.recovered_insight) {
+        const dRec = document.getElementById('deltaRecovered');
+        dRec.textContent = metrics.recovered_insight;
+        dRec.className = 'rf-metric-delta ' + (metrics.recovered_insight.includes('↑') ? 'up' : 'down');
+    }
+    if (metrics.rate_insight) {
+        const dRate = document.getElementById('deltaRate');
+        dRate.textContent = metrics.rate_insight;
+        dRate.className = 'rf-metric-delta ' + (metrics.rate_insight.includes('↑') ? 'up' : 'down');
+    }
+    if (metrics.time_insight) {
+        const dTime = document.getElementById('deltaTime');
+        dTime.textContent = metrics.time_insight;
+        dTime.className = 'rf-metric-delta ' + (metrics.time_insight.includes('↑') ? 'up' : 'down');
+    }
       } catch (error) {
         console.error("Error fetching metrics:", error);
       }
