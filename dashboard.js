@@ -125,21 +125,14 @@
     const panel = document.getElementById('detailPanel');
     panel.classList.add('active');
     document.getElementById('detailTitle').textContent = `AI Decision: ${selectedTx.id}`;
-    const base = 50;
-      const amountBonus = selectedTx.amount > 10000 ? 15 : selectedTx.amount > 5000 ? 10 : 0;
-      const ltvBonus = selectedTx.ltv > 50000 ? 10 : selectedTx.ltv > 20000 ? 5 : 0;
-      const historyBonus = selectedTx.history > 0.7 ? 20 : selectedTx.history > 0.4 ? 10 : 0;
-    const bucketBonus = selectedTx.bucket === 'soft' ? 20 : selectedTx.bucket === 'customer_action' ? 5 : -30;
-    const methodBonus = selectedTx.method === 'UPI' ? 5 : 0;
     document.getElementById('scoreBreakdown').innerHTML = `
-    <div style="font-size:14px;font-weight:600;margin-bottom:10px;">Score breakdown</div>
-    <div class="rf-score-row"><span class="score-label">Base score</span><span class="score-value">${base}</span></div>
-    <div class="rf-score-row"><span class="score-label">Amount (₹${selectedTx.amount.toLocaleString('en-IN')})</span><span class="score-value ${amountBonus >= 0 ? 'pos' : 'neg'}">${amountBonus >= 0 ? '+' : ''}${amountBonus}</span></div>
-    <div class="rf-score-row"><span class="score-label">Customer LTV (₹${selectedTx.ltv.toLocaleString('en-IN')})</span><span class="score-value ${ltvBonus >= 0 ? 'pos' : 'neg'}">${ltvBonus >= 0 ? '+' : ''}${ltvBonus}</span></div>
-    <div class="rf-score-row"><span class="score-label">Recovery history (${(selectedTx.history * 100).toFixed(0)}%)</span><span class="score-value ${historyBonus >= 0 ? 'pos' : 'neg'}">${historyBonus >= 0 ? '+' : ''}${historyBonus}</span></div>
-    <div class="rf-score-row"><span class="score-label">Failure bucket (${selectedTx.bucket})</span><span class="score-value ${bucketBonus >= 0 ? 'pos' : 'neg'}">${bucketBonus >= 0 ? '+' : ''}${bucketBonus}</span></div>
-    <div class="rf-score-row"><span class="score-label">Payment method (${selectedTx.method})</span><span class="score-value ${methodBonus >= 0 ? 'pos' : 'neg'}">${methodBonus >= 0 ? '+' : ''}${methodBonus}</span></div>
-    <div class="rf-score-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:10px;"><span class="score-label">Final score</span><span class="score-value" style="font-size:18px;">${selectedTx.potential}%</span></div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:10px;">AI Model Inputs</div>
+    <div class="rf-score-row"><span class="score-label">Amount</span><span class="score-value">₹${selectedTx.amount.toLocaleString('en-IN')}</span></div>
+    <div class="rf-score-row"><span class="score-label">Customer LTV</span><span class="score-value">₹${selectedTx.ltv.toLocaleString('en-IN')}</span></div>
+    <div class="rf-score-row"><span class="score-label">Recovery history</span><span class="score-value">${(selectedTx.history * 100).toFixed(0)}%</span></div>
+    <div class="rf-score-row"><span class="score-label">Failure bucket</span><span class="score-value" style="text-transform: capitalize;">${selectedTx.bucket.replace('_', ' ')}</span></div>
+    <div class="rf-score-row"><span class="score-label">Payment method</span><span class="score-value">${selectedTx.method}</span></div>
+    <div class="rf-score-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:10px;"><span class="score-label">True AI Predicted Score</span><span class="score-value pos" style="font-size:18px;">${selectedTx.potential}%</span></div>
     `;
     document.getElementById('detailGrid').innerHTML = `
     <div class="rf-detail-item"><div class="rf-detail-item-label">Transaction ID</div><div class="rf-detail-item-value">${selectedTx.id}</div></div>
