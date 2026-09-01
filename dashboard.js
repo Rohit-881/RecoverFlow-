@@ -298,7 +298,7 @@
     if (recovered) {
         log(`Recovery successful! ₹${newTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
         // Fetch latest transaction from backend to get the REAL audit trail
-        const latestTx = await fetch('http://localhost:8000/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
+        const latestTx = await fetch('https://recoverflow-backened.onrender.com/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
         newTx = latestTx;
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = '₹' + newTx.amount.toLocaleString('en-IN') + ' recovered';
@@ -307,7 +307,7 @@
       } else {
         log(`Recovery failed.`, 'error');
         // Fetch latest transaction from backend to get the REAL audit trail
-        const latestTx = await fetch('http://localhost:8000/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
+        const latestTx = await fetch('https://recoverflow-backened.onrender.com/transactions/' + newTx.id).then(r => r.json()).catch(() => newTx);
         newTx = latestTx;
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = 'Recovery failed';

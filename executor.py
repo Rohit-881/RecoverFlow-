@@ -70,68 +70,23 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
         action_name = strategy["action"]
         channel = strategy["channels"][min(attempts - 1, len(strategy["channels"]) - 1)] if strategy["channels"] else "smart_retry"
 
-        # If strategy uses payment links, generate a real or mock one!
+        # If strategy uses payment links, generate an on-demand link!
         if channel == "payment_link":
-            link_created = False
-            if rzp_client:
-                try:
-                    # Create a real Razorpay payment link
-                    pl = rzp_client.payment_link.create({
-                        "amount": txn.amount * 100,  # paise
-                        "currency": txn.currency,
-                        "description": "RecoverFlow AI Payment Recovery",
-                        "reference_id": txn.id,
-                        "notify": {
-                            "sms": True,
-                            "email": True
-                        },
-                        "reminder_enable": True,
-                        "expire_by": int(time.time()) + 960, # Razorpay requires at least 15 mins
-                        "notes": {
-                            "txn_id": txn.id
-                        }
-                    })
-                    txn.payment_link_id = pl.get("id")
-                    txn.payment_link_url = pl.get("short_url")
-
-                    cost = 0.50  # small cost for link generation & SMS
-                    cost_accrued += cost
-                    
-                    llm_msg = generate_llm_outreach(txn)
-                    
-                    audit.append(AuditEntry(
-                        timestamp=datetime.now(timezone.utc),
-                        action=f"Attempt #{attempts}: Sent real Razorpay Payment Link via {channel}",
-                        result="info",
-                        cost_inr=cost,
-                        link_url=txn.payment_link_url,
-                        llm_message=llm_msg
-                    ))
-                    link_created = True
-                except Exception as e:
-                    audit.append(AuditEntry(
-                        timestamp=datetime.now(timezone.utc),
-                        action=f"Attempt #{attempts}: Failed to create real payment link — {str(e)}",
-                        result="fail",
-                        cost_inr=0.0,
-                    ))
-                    # If it errors, we will fall back to creating a mock link below!
-                    
-            if not link_created:
-                # Mock Mode or Fallback
-                txn.payment_link_url = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
-                cost = 0.0
-                
-                llm_msg = generate_llm_outreach(txn)
-                
-                audit.append(AuditEntry(
-                    timestamp=datetime.now(timezone.utc),
-                    action=f"Attempt #{attempts}: Sent simulated Payment Link via {channel}",
-                    result="info",
-                    cost_inr=cost,
-                    link_url=txn.payment_link_url,
-                    llm_message=llm_msg
-                ))
+            fake_link = f"https://recoverflow-backened.onrender.com/transactions/{txn.id}/pay"
+            txn.payment_link_url = fake_link
+            cost = 0.0  # Link isn't actually created until they click it!
+            cost_accrued += cost
+            
+            llm_msg = generate_llm_outreach(txn)
+            
+            audit.append(AuditEntry(
+                timestamp=datetime.now(timezone.utc),
+                action=f"Attempt #{attempts}: Generated secure payment link via {channel}",
+                result="info",
+                cost_inr=cost,
+                link_url=txn.payment_link_url,
+                llm_message=llm_msg
+            ))
 
             time_taken = (datetime.now(timezone.utc) - start_time).total_seconds()
             

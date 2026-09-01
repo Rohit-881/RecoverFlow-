@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import RedirectResponse
 
 from models import AuditEntry, MerchantConfig, RecoveryStatus, Transaction
 from store import merchant_configs, transactions_db
@@ -73,27 +74,11 @@ async def simulate_failure(background_tasks: BackgroundTasks):
     elif txn.status == RecoveryStatus.FAILED:
         txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Max retries exhausted", result="fail", strategy=txn.strategy, cost_inr=5.00))
     elif txn.status == RecoveryStatus.WAITING_FOR_CUSTOMER:
-        fake_link = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
-        
-        # Try to generate a REAL link if keys are configured!
-        if rzp_client:
-            try:
-                pl = rzp_client.payment_link.create({
-                    "amount": txn.amount * 100,
-                    "currency": "INR",
-                    "description": "RecoverFlow AI Demo Recovery",
-                    "reference_id": txn.id,
-                    "expire_by": int(time.time()) + 960, # Razorpay requires at least 15 mins (using 16 mins to be safe)
-                    "notes": {"txn_id": txn.id}
-                })
-                fake_link = pl.get("short_url", fake_link)
-                txn.payment_link_id = pl.get("id")
-            except Exception as e:
-                print(f"[SIMULATOR] Could not create real link, falling back to mock: {e}")
+        fake_link = f"https://recoverflow-backened.onrender.com/transactions/{txn.id}/pay"
 
         txn.payment_link_url = fake_link
         llm_msg = generate_llm_outreach(txn)
-        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Sent Razorpay Payment Link", result="info", strategy=txn.strategy, cost_inr=0.50, link_url=fake_link, llm_message=llm_msg))
+        txn.audit.append(AuditEntry(timestamp=datetime.now(timezone.utc), action="Generated secure payment link for customer", result="info", strategy=txn.strategy, cost_inr=0.00, link_url=fake_link, llm_message=llm_msg))
 
     transactions_db[txn.id] = txn
 
@@ -120,6 +105,50 @@ async def trigger_recovery(txn_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_recovery, txn_id, strategy, config)
 
     return {"status": "recovery_started", "txn_id": txn_id}
+
+
+@router.get("/transactions/{txn_id}/pay")
+def pay_transaction(txn_id: str):
+    """On-demand generation of a Razorpay link when the user clicks 'Pay Now'."""
+    txn = transactions_db.get(txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # If the link was already generated, just redirect to it
+    if txn.payment_link_url and "rzp.io" in txn.payment_link_url:
+        return RedirectResponse(url=txn.payment_link_url)
+
+    # Generate a fresh live link via Razorpay
+    if rzp_client:
+        try:
+            pl = rzp_client.payment_link.create({
+                "amount": txn.amount * 100,
+                "currency": "INR",
+                "description": "RecoverFlow AI Demo Recovery",
+                "reference_id": txn.id,
+                "expire_by": int(time.time()) + 960,
+                "notes": {"txn_id": txn.id}
+            })
+            txn.payment_link_id = pl.get("id")
+            txn.payment_link_url = pl.get("short_url")
+            
+            # Log the API cost now that we actually spent it
+            txn.audit.append(AuditEntry(
+                timestamp=datetime.now(timezone.utc),
+                action="Customer opened link. Real Razorpay Payment Link generated.",
+                result="success",
+                cost_inr=0.50,
+                strategy=txn.strategy
+            ))
+            return RedirectResponse(url=txn.payment_link_url)
+        except Exception as e:
+            print(f"[ON-DEMAND LINK ERR] {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate payment link via Razorpay.")
+            
+    # Mock fallback if no API keys
+    mock_url = f"https://rzp.io/i/mock{random.randint(1000, 9999)}"
+    txn.payment_link_url = mock_url
+    return RedirectResponse(url=mock_url)
 
 
 
