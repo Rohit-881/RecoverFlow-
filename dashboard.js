@@ -245,86 +245,64 @@
     log(`Webhook received: payment.failed`, 'info');
     await sleep(600);
     progressFill.style.width = '10%';
-    log(`Transaction: ${simTx.id} | Amount: ₹${simTx.amount.toLocaleString('en-IN')} | Reason: ${simTx.reason}`, 'info');
+    
+    // Call the real backend to generate a failed transaction
+    let newTx;
+    try {
+        const response = await fetch('https://recoverflow-backened.onrender.com/transactions/simulate', { method: 'POST' });
+        if (!response.ok) throw new Error("API error");
+        await fetchTransactions(); // Refresh the list from the backend
+        newTx = transactions[0]; // The newest one is at the top
+    } catch (e) {
+        log(`Failed to connect to backend AI`, 'error');
+        btn.disabled = false;
+        return;
+    }
+
+    log(`Transaction: ${newTx.id} | Amount: ₹${newTx.amount.toLocaleString('en-IN')} | Reason: ${newTx.reason}`, 'info');
     await sleep(800);
     progressFill.style.width = '25%';
 
-    log(`Running recovery scoring model...`, 'info');
+    log(`Running true Machine Learning scoring model...`, 'info');
     await sleep(700);
-    const base = 50;
-      const amountBonus = simTx.amount > 10000 ? 15 : simTx.amount > 5000 ? 10 : 0;
-      const ltvBonus = simTx.ltv > 50000 ? 10 : simTx.ltv > 20000 ? 5 : 0;
-      const historyBonus = simTx.history > 0.7 ? 20 : simTx.history > 0.4 ? 10 : 0;
-    const bucketBonus = simTx.bucket === 'soft' ? 20 : simTx.bucket === 'customer_action' ? 5 : -30;
-    const score = Math.min(100, Math.max(0, base + amountBonus + ltvBonus + historyBonus + bucketBonus));
-    simTx.potential = score;
+    const score = newTx.potential;
     log(`Recovery potential scored: ${score}%`, score > 60 ? 'success' : score > 30 ? 'warn' : 'error');
     await sleep(600);
     progressFill.style.width = '40%';
 
-    log(`Selecting optimal strategy...`, 'info');
+    log(`Selecting optimal strategy via AI...`, 'info');
     await sleep(500);
-    let strategy, maxAttempts, timing;
-    if (score < 20) {strategy = 'Skip — manual review'; maxAttempts = 0; timing = 'N/A'; }
-      else if (simTx.bucket === 'soft' && score > 70) {strategy = 'Alt-gateway immediate retry'; maxAttempts = 2; timing = 'Now + 5 min'; }
-      else if (simTx.bucket === 'customer_action' && score > 50) {strategy = 'Delayed retry + SMS/WhatsApp'; maxAttempts = 3; timing = 'Predicted payday'; }
-      else if (simTx.bucket === 'hard' && score > 30) {strategy = 'Card update → dunning sequence'; maxAttempts = 1; timing = 'T+1, T+3, T+7'; }
-    else {strategy = 'Manual review queue'; maxAttempts = 1; timing = 'Business hours'; }
-    simTx.strategy = strategy;
-    log(`Selected: ${strategy} | Max attempts: ${maxAttempts} | Timing: ${timing}`, 'info');
+    const strategy = newTx.strategy;
+    log(`Selected Strategy: ${strategy}`, 'info');
     await sleep(600);
-    progressFill.style.width = '55%';
-
-    log(`Checking merchant bounds (max retries: ${merchantConfig.maxRetries}, max cost: ₹${merchantConfig.maxCost})...`, 'info');
-    await sleep(400);
-    if (score < merchantConfig.minScore) {
-        log(`Score ${score}% below minimum threshold (${merchantConfig.minScore}%). Routing to manual review.`, 'warn');
-    progressFill.style.width = '100%';
-    simTx.status = 'failed';
-    simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Scored ${score}% — below min threshold`, result: 'warn', strategy: 'AI Scoring', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: 'Routed to manual review', result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 }
-    ];
-    resultPanel.style.display = 'block';
-    document.getElementById('simResultText').textContent = 'Manual review';
-    document.getElementById('simResultText').style.color = 'var(--warning)';
-    document.getElementById('simResultDetail').textContent = `Score ${score}% below merchant threshold of ${merchantConfig.minScore}%`;
-    btn.disabled = false;
-    transactions.unshift(simTx);
-    renderAll();
-    return;
-      }
-    log(`Bounds satisfied. Proceeding with recovery.`, 'success');
-    await sleep(400);
     progressFill.style.width = '70%';
 
     log(`Executing recovery...`, 'info');
     await sleep(800);
-      const recovered = Math.random() > 0.35;
+    const recovered = newTx.status === 'recovered';
     progressFill.style.width = '90%';
 
     if (recovered) {
-        log(`Recovery successful! ₹${simTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
-    simTx.status = 'recovered';
-    simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${simTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
+        log(`Recovery successful! ₹${newTx.amount.toLocaleString('en-IN')} recovered.`, 'success');
+    newTx.status = 'recovered';
+    newTx.audit = [
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${newTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${newTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
     {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${simTx.amount.toLocaleString('en-IN')} recovered successfully via ${simTx.method}`, result: 'success', strategy: strategy, cost_inr: 2.50 }
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `₹${newTx.amount.toLocaleString('en-IN')} recovered successfully via ${newTx.method}`, result: 'success', strategy: strategy, cost_inr: 2.50 }
     ];
     resultPanel.style.display = 'block';
-    document.getElementById('simResultText').textContent = '₹' + simTx.amount.toLocaleString('en-IN') + ' recovered';
+    document.getElementById('simResultText').textContent = '₹' + newTx.amount.toLocaleString('en-IN') + ' recovered';
     document.getElementById('simResultText').style.color = 'var(--positive)';
-    document.getElementById('simResultDetail').textContent = `Strategy: ${strategy} | Score: ${score}% | Attempts: 1/${maxAttempts}`;
+    document.getElementById('simResultDetail').textContent = `Strategy: ${strategy} | Score: ${score}% | Attempts: 1/1`;
       } else {
-        log(`Recovery failed after ${maxAttempts} attempts.`, 'error');
-    simTx.status = 'failed';
-    simTx.audit = [
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${simTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${simTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
+        log(`Recovery failed.`, 'error');
+    newTx.status = 'failed';
+    newTx.audit = [
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Webhook received: payment.failed — ${newTx.reason} (Gateway: HDFC)`, result: 'fail', strategy: 'Detection', cost_inr: 0.0 },
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Classified failure: ${newTx.bucket} | Scored recovery potential: ${score}%`, result: 'info', strategy: 'AI Scoring', cost_inr: 0.0 },
     {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Selected strategy: ${strategy} (Optimiser routing)`, result: 'info', strategy: 'Strategy Router', cost_inr: 0.0 },
-    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `Max attempts (${maxAttempts}) exhausted`, result: 'fail', strategy: strategy, cost_inr: 5.00 }
+    {time: new Date().toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), action: `All attempts exhausted`, result: 'fail', strategy: strategy, cost_inr: 5.00 }
     ];
     resultPanel.style.display = 'block';
     document.getElementById('simResultText').textContent = 'Recovery failed';
@@ -333,13 +311,12 @@
       }
     progressFill.style.width = '100%';
     btn.disabled = false;
-    transactions.unshift(simTx);
     renderAll();
     }
 
     async function generateNewFailure() {
       try {
-        const response = await fetch('http://localhost:8000/transactions/simulate', {
+        const response = await fetch('https://recoverflow-backened.onrender.com/transactions/simulate', {
         method: 'POST'
         });
     if (!response.ok) throw new Error("Network response was not ok");

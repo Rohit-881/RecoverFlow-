@@ -1,5 +1,5 @@
-fastapi
-uvicorn
-pydantic
-razorpay
-python-dotenv
+fastapi==0.111.0
+uvicorn==0.30.0
+pydantic==2.7.0
+razorpay==1.4.1
+python-dotenv==1.0.0
