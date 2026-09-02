@@ -197,27 +197,76 @@ async def inbound_message(payload: InboundMessage):
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
-            prompt = f"Extract a promise date from this message: '{payload.message}'. If they promise to pay on a specific date or day, return ONLY that date in YYYY-MM-DD format based on today ({datetime.now().strftime('%Y-%m-%d')}). If no date is promised, return 'NONE'."
+            import json
+            prompt = f"""
+Analyze this customer message: '{payload.message}'.
+Today is: {datetime.now().strftime('%Y-%m-%d')}
+Extract the promise to pay date if they mention one.
+
+Respond ONLY with valid JSON in this exact format, with no markdown formatting or extra text:
+{{
+  "date": "YYYY-MM-DD" or null if no date is promised,
+  "confidence": "high", "medium", or "low",
+  "reasoning": "short explanation of why you chose this date and confidence level"
+}}
+"""
             response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
-            extracted = response.text.strip()
-            print(f"[GEMINI RAW] {extracted}")
+            raw_text = response.text.strip()
+            print(f"[GEMINI RAW] {raw_text}")
             
-            if extracted != "NONE" and len(extracted) == 10:
-                try:
-                    promise_date = datetime.strptime(extracted, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            # Strip markdown code blocks if present
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:-3].strip()
+            elif raw_text.startswith("```"):
+                raw_text = raw_text[3:-3].strip()
+                
+            try:
+                result_json = json.loads(raw_text)
+                extracted_date = result_json.get("date")
+                confidence = result_json.get("confidence")
+                reasoning = result_json.get("reasoning", "No reasoning provided")
+                
+                # Hybrid Logic Implementation
+                if txn.amount > 50000: # Example high value threshold (₹50,000)
+                    txn.status = RecoveryStatus.MANUAL_REVIEW
+                    txn.audit.append(AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"High-value txn sent to manual review. AI reasoning: {reasoning}",
+                        result="info",
+                        strategy="Hybrid NLP",
+                        cost_inr=0.0
+                    ))
+                    return {"status": "manual_review", "note": "High value transaction"}
+                    
+                elif extracted_date and confidence == "high":
+                    promise_date = datetime.strptime(extracted_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                     txn.promise_date = promise_date
                     txn.status = RecoveryStatus.PROMISE_TO_PAY
                     txn.audit.append(AuditEntry(
                         timestamp=datetime.now(timezone.utc),
-                        action=f"AI extracted promise date: {extracted}. Pausing recovery until then.",
+                        action=f"AI extracted high-confidence date: {extracted_date}. Reason: {reasoning}",
                         result="success",
-                        strategy="NLP Parser",
+                        strategy="Hybrid NLP",
                         cost_inr=0.0
                     ))
-                    print(f"[NLP] Parsed promise date: {extracted} for {txn.id}")
-                    return {"status": "promise_logged", "date": extracted}
-                except ValueError:
+                    print(f"[NLP] High-confidence promise date: {extracted_date} for {txn.id}")
+                    return {"status": "promise_logged", "date": extracted_date}
+                    
+                elif len(payload.message.split()) > 5 or confidence in ["medium", "low"]:
+                    txn.status = RecoveryStatus.MANUAL_REVIEW
+                    txn.audit.append(AuditEntry(
+                        timestamp=datetime.now(timezone.utc),
+                        action=f"Vague/complex message sent to manual review. AI reasoning: {reasoning}",
+                        result="warn",
+                        strategy="Hybrid NLP",
+                        cost_inr=0.0
+                    ))
+                    return {"status": "manual_review", "note": "Vague or complex message"}
+                else:
+                    # Message didn't contain a date and was short/simple
                     pass
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"[NLP JSON/Parse ERROR] {e}")
         except Exception as e:
             print(f"[NLP ERROR] {e}")
             
