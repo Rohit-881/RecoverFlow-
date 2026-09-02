@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from config import rzp_client, RAZORPAY_WEBHOOK_SECRET
 from models import AuditEntry, FailureBucket, RecoveryStatus, Transaction
 from store import merchant_configs, transactions_db
-from scoring import score_recovery_potential
+from scoring import classify_failure, score_recovery_potential
 from strategy import select_strategy
 from executor import auto_resolve_mock
 from models import MerchantConfig
@@ -80,7 +80,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             if subscription_id:
                 txn.bucket = FailureBucket.SUBSCRIPTION_FAILED
             else:
-                txn.bucket = random.choice(list(FailureBucket))
+                txn.bucket = classify_failure(error_reason)
             score_result = score_recovery_potential(txn)
             txn.potential = score_result["score"]
 

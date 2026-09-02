@@ -120,6 +120,11 @@ Hard decline	20–40	Card update → dunning	1 + 2 nudges	T+1, T+3, T+7
 Fraud/blocked	0–20	Skip — manual review	0	N/A
 Checkout drop-off	50–80	Abandoned cart WA	2	30 min + 24h
 ________________________________________
+
+## ✨ Key Innovation: NLP Promise-to-Pay
+RecoverFlow AI includes a dedicated webhook to handle inbound customer SMS replies. If a customer replies to a dunning SMS with *"I will pay you on Friday"* or *"Salary comes on the 5th"*, the system uses **Gemini 2.5 Flash** to extract the exact promised date. It then automatically sets the transaction status to `PROMISE_TO_PAY` and pauses all recovery nudges until that date arrives.
+
+________________________________________
 Merchant Configuration
 Merchants can configure: - Max retry attempts (1–10) - Max cost per recovery (₹5–₹200) - Do-not-disturb hours (no calls/SMS during these hours) - Minimum recovery score (transactions below this go to manual review) - Auto-retry soft declines (immediate alt-gateway retry) - Channel enablement (SMS, WhatsApp, email, voice call, payment link)
 ________________________________________
@@ -129,9 +134,8 @@ Next Steps for Production
 3.	Integrate Razorpay Payment Links API for recovery link generation
 4.	Add Twilio/Exotel for Hinglish voice calls
 5.	Add WhatsApp Business API for recovery nudges
-6.	Add PostgreSQL for persistent transaction storage
-7.	Add Redis for retry job queues
-8.	Add A/B testing framework for strategy efficacy comparison
+6.	Add Redis for retry job queues
+7.	Add A/B testing framework for strategy efficacy comparison
 ________________________________________
 Team
 Built for Razorpay Buildathon 2026 — Track 03: AI Revenue Recovery

@@ -112,14 +112,6 @@ async def execute_recovery(txn: Transaction, strategy: Dict[str, Any], config: M
                 audit=audit,
                 time_taken_seconds=time_taken,
             )
-            # except Exception as e:
-            #     audit.append(AuditEntry(
-            #         timestamp=datetime.now(timezone.utc),
-            #         action=f"Attempt #{attempts}: Failed to create real payment link — {str(e)}",
-            #         result="fail",
-            #         cost_inr=0.0,
-            #     ))
-            #     # Fall through to standard fail logic if it errors
         else:
             # Simulate execution for other channels
             await asyncio.sleep(0.5)  # Simulate API call latency
