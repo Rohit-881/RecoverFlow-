@@ -89,7 +89,7 @@
     // Simulate gateway failures vs detected webhooks for realistic funnel drop-off
     const failed = Math.floor(detected * 1.12) || 1; 
       const scored = transactions.filter(t => t.potential > 20).length; // Exclude unrecoverable low scores
-      const intervened = transactions.filter(t => ['retrying', 'recovered', 'failed'].includes(t.status)).length; // Exclude pending/manual review
+      const intervened = transactions.filter(t => ['retrying', 'recovered', 'failed', 'promise_to_pay', 'waiting_for_customer'].includes(t.status)).length; // Exclude pending/manual review
       const recovered = transactions.filter(t => t.status === 'recovered').length;
 
     const data = [
@@ -116,7 +116,7 @@
       tbody.innerHTML = displayData.map((t) => {
         const idx = transactions.indexOf(t);
         const potColor = t.potential > 70 ? 'var(--positive)' : t.potential > 40 ? 'var(--warning)' : 'var(--danger)';
-    const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : t.status === 'waiting_for_customer' ? 'chart-4' : 'text-secondary';
+    const statusColor = t.status === 'recovered' ? 'positive' : t.status === 'retrying' ? 'warning' : t.status === 'failed' ? 'danger' : t.status === 'waiting_for_customer' ? 'chart-4' : t.status === 'promise_to_pay' ? 'chart-5' : 'text-secondary';
     const displayStatus = t.status.replace(/_/g, ' ');
     return `
     <tr onclick="showDetail(${idx})" style="cursor:pointer;">
