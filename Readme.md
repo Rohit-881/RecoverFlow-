@@ -11,7 +11,7 @@ RecoverFlow AI detects revenue at risk from payment failures, scores recovery po
 | | Link |
 |---|---|
 | **Frontend (Dashboard)** | [recover-flow-zeta.vercel.app/dashboard.html](https://recover-flow-zeta.vercel.app/dashboard.html) |
-| **Backend (API)** | [recoverflow-backened.onrender.com](https://recoverflow-backened.onrender.com) |
+| **Backend (API)** | [recoverflow-backened.onrender.com](https://recoverflow-backened.onrender.com/docs) |
 
 > ⚠️ **Note:** The backend is hosted on Render's free tier, which spins down after periods of inactivity. The first request after idle time may take 30–50 seconds to respond while the instance cold-starts — subsequent requests are fast. If you're demoing live, hit the `/health` endpoint a minute beforehand to warm it up.
 
