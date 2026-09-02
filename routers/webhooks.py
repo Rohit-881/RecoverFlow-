@@ -200,6 +200,7 @@ async def inbound_message(payload: InboundMessage):
             prompt = f"Extract a promise date from this message: '{payload.message}'. If they promise to pay on a specific date or day, return ONLY that date in YYYY-MM-DD format based on today ({datetime.now().strftime('%Y-%m-%d')}). If no date is promised, return 'NONE'."
             response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
             extracted = response.text.strip()
+            print(f"[GEMINI RAW] {extracted}")
             
             if extracted != "NONE" and len(extracted) == 10:
                 try:
