@@ -44,7 +44,7 @@ The message should be polite, empathetic, and tell them we generated a new secur
 Do not include placeholders for the link, just end the message with a colon."""
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
         )
         return response.text.strip()
