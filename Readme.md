@@ -56,6 +56,7 @@ ________________________________________
 API Endpoints
 Endpoint	Method	Description
 /webhooks/razorpay	POST	Receive Razorpay payment failure webhooks
+/webhooks/inbound-message	POST	Receive inbound customer SMS/chat replies for NLP parsing
 /transactions	GET	List all transactions
 /transactions/{id}	GET	Get transaction details + audit trail
 /transactions/{id}/recover	POST	Manually trigger recovery
@@ -121,8 +122,11 @@ Fraud/blocked	0–20	Skip — manual review	0	N/A
 Checkout drop-off	50–80	Abandoned cart WA	2	30 min + 24h
 ________________________________________
 
-## ✨ Key Innovation: NLP Promise-to-Pay
-RecoverFlow AI includes a dedicated webhook to handle inbound customer SMS replies. If a customer replies to a dunning SMS with *"I will pay you on Friday"* or *"Salary comes on the 5th"*, the system uses **Gemini 2.5 Flash** to extract the exact promised date. It then automatically sets the transaction status to `PROMISE_TO_PAY` and pauses all recovery nudges until that date arrives.
+## ✨ Key Innovation: Hybrid AI Promise-to-Pay (P2P) Engine
+RecoverFlow AI features an intelligent inbound webhook to handle customer SMS/chat replies. Instead of blindly trusting AI or relying entirely on human agents, it uses a **Hybrid Human-in-the-Loop Model** powered by **Google Gemini**:
+- **Confidence Scoring**: Extracts the promised date, confidence level, and reasoning directly from natural language (e.g., *"Salary comes on the 5th"*).
+- **Automated Pausing**: If the AI is highly confident, it extracts the date, sets the status to `PROMISE_TO_PAY`, and automatically pauses dunning.
+- **Enterprise Risk Management**: If the transaction is high-value (>₹50,000), or if the message is vague/complex (low confidence), it routes the transaction to a **Manual Review Queue**. The AI attaches its reasoning to the audit log to assist the human agent in making the final call.
 
 ________________________________________
 Merchant Configuration
