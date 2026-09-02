@@ -92,9 +92,11 @@ Do not include line labels like 'Line 1:', just the 4 lines."""
                         "rate_insight": lines[2].replace("Line 3 (Rate Insight): ", "").replace("Line 3: ", ""),
                         "time_insight": lines[3].replace("Line 4 (Time Insight): ", "").replace("Line 4: ", "")
                     }
-                    ai_insights_cache["timestamp"] = current_time
             except Exception as e:
                 print(f"[AI INSIGHTS ERROR] {e}")
+            finally:
+                # Update timestamp even if it fails so we don't spam the API on the next request
+                ai_insights_cache["timestamp"] = current_time
 
     return DashboardMetrics(
         revenue_at_risk=total_risk,
