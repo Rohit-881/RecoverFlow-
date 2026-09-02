@@ -61,9 +61,9 @@ async def get_metrics() -> DashboardMetrics:
 
     avg_time = round(total_time / len(recovered), 1) if recovered else 0.0
 
-    # AI Insight Generation (cached for 60 seconds)
+    # AI Insight Generation (cached for 5 minutes)
     current_time = time.time()
-    if current_time - ai_insights_cache["timestamp"] > 60:
+    if current_time - ai_insights_cache["timestamp"] > 300:
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key and total_resolved > 0:
             try:
