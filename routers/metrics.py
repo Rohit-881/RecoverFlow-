@@ -88,7 +88,7 @@ Line 3 (Rate Insight): ↑ Rate is up...
 Line 4 (Time Insight): ↓ Time is faster...
 Do not include line labels like 'Line 1:', just the 4 lines."""
                 response = client.messages.create(
-                    model="claude-3-haiku-20240307",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=150,
                     messages=[{"role": "user", "content": prompt}]
                 )
