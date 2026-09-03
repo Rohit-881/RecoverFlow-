@@ -62,6 +62,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             method = payment_entity.get("method", "Unknown")
             txn_id = payment_entity.get("id")
             subscription_id = payment_entity.get("subscription_id")
+            invoice_id = payment_entity.get("invoice_id")
 
             # Use real historical context if available, otherwise mock for demo
             customer_history = round(random.random(), 2)  # In reality, fetch from DB
@@ -79,6 +80,8 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             # Let the AI Agent classify, score, and strategize
             if subscription_id:
                 txn.bucket = FailureBucket.SUBSCRIPTION_FAILED
+            elif invoice_id:
+                txn.bucket = FailureBucket.B2B_OVERDUE
             else:
                 txn.bucket = classify_failure(error_reason)
             score_result = score_recovery_potential(txn)
