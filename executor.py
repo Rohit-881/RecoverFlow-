@@ -25,7 +25,11 @@ def generate_llm_outreach(txn: Transaction) -> str:
         
     try:
         from anthropic import Anthropic
-        client = Anthropic(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+        if workspace_id:
+            kwargs["default_headers"] = {"anthropic-workspace-id": workspace_id}
+        client = Anthropic(**kwargs)
         
         if txn.bucket == FailureBucket.B2B_OVERDUE:
             prompt = f"""Write a short, formal, and professional B2B email to a client whose invoice payment of ₹{txn.amount} has expired or is overdue.

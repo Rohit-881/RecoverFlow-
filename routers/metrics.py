@@ -68,7 +68,11 @@ async def get_metrics() -> DashboardMetrics:
         if api_key and total_resolved > 0:
             try:
                 from anthropic import Anthropic
-                client = Anthropic(api_key=api_key)
+                kwargs = {"api_key": api_key}
+                workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+                if workspace_id:
+                    kwargs["default_headers"] = {"anthropic-workspace-id": workspace_id}
+                client = Anthropic(**kwargs)
                 prompt = f"""You are analyzing a payment recovery dashboard.
 Current Metrics:
 - Revenue at Risk: ₹{total_risk}

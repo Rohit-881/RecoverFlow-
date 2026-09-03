@@ -227,8 +227,13 @@ async def inbound_message(payload: InboundMessage):
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if api_key:
         try:
+            # pyrefly: ignore [missing-import]
             from anthropic import Anthropic
-            client = Anthropic(api_key=api_key)
+            kwargs = {"api_key": api_key}
+            workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+            if workspace_id:
+                kwargs["default_headers"] = {"anthropic-workspace-id": workspace_id}
+            client = Anthropic(**kwargs)
             import json
             prompt = f"""
 Analyze this customer message: '{payload.message}'.
