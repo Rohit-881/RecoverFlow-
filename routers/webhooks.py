@@ -224,11 +224,11 @@ async def inbound_message(payload: InboundMessage):
     ))
     
     import os
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if api_key:
         try:
-            from google import genai
-            client = genai.Client(api_key=api_key)
+            from anthropic import Anthropic
+            client = Anthropic(api_key=api_key)
             import json
             prompt = f"""
 Analyze this customer message: '{payload.message}'.
@@ -242,9 +242,13 @@ Respond ONLY with valid JSON in this exact format, with no markdown formatting o
   "reasoning": "short explanation of why you chose this date and confidence level"
 }}
 """
-            response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
-            raw_text = response.text.strip()
-            print(f"[GEMINI RAW] {raw_text}")
+            response = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw_text = response.content[0].text.strip()
+            print(f"[CLAUDE RAW] {raw_text}")
             
             # Strip markdown code blocks if present
             if raw_text.startswith("```json"):

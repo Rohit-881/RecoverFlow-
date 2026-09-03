@@ -2,15 +2,15 @@ import requests
 import json
 
 def run_live_test():
-    base_url = "http://localhost:8000"
+    base_url = "https://recoverflow-backened.onrender.com"
     
     # 1. Fetch existing transactions from the LIVE running server
-    print("Fetching existing transactions from http://localhost:8000...")
+    print(f"Fetching existing transactions from {base_url}...")
     try:
         response = requests.get(f"{base_url}/transactions")
         transactions = response.json()
     except Exception as e:
-        print("Error connecting to server. Make sure it is running on port 8000!")
+        print("Error connecting to server. Make sure it is running!")
         print(e)
         return
         
@@ -36,7 +36,7 @@ def run_live_test():
     print("\n--- Response ---")
     print(f"Status Code: {webhook_response.status_code}")
     print(f"Body: {json.dumps(webhook_response.json(), indent=2)}")
-    print("\nSUCCESS! Now go look at your Dashboard (http://localhost:8000) and click the 'Promised' filter!")
+    print("\nSUCCESS! Now go look at your Dashboard and click the 'Promised' filter!")
 
 if __name__ == "__main__":
     run_live_test()

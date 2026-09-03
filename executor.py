@@ -19,13 +19,13 @@ from strategy import select_strategy
 from config import rzp_client
 
 def generate_llm_outreach(txn: Transaction) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         return f"Hi there, it looks like your {txn.method} payment for ₹{txn.amount} failed due to a {txn.reason.lower()}. No worries at all! Here is a secure link to complete your payment:"
         
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        from anthropic import Anthropic
+        client = Anthropic(api_key=api_key)
         
         if txn.bucket == FailureBucket.B2B_OVERDUE:
             prompt = f"""Write a short, formal, and professional B2B email to a client whose invoice payment of ₹{txn.amount} has expired or is overdue.
@@ -43,11 +43,12 @@ The failure reason given by the bank was: "{txn.reason}".
 The message should be polite, empathetic, and tell them we generated a new secure link for them to try again.
 Do not include placeholders for the link, just end the message with a colon."""
         
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=prompt,
+        response = client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}]
         )
-        return response.text.strip()
+        return response.content[0].text.strip()
     except Exception as e:
         print(f"LLM Error: {e}")
         return f"Hi there, it looks like your {txn.method} payment for ₹{txn.amount} failed due to a {txn.reason.lower()}. No worries at all! Here is a secure link to complete your payment:"
