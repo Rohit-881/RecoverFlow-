@@ -303,7 +303,9 @@ Respond ONLY with valid JSON in this exact format, with no markdown formatting o
                     pass
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"[NLP JSON/Parse ERROR] {e}")
+                return {"status": "error", "note": f"JSON Parse Error: {str(e)}"}
         except Exception as e:
             print(f"[NLP ERROR] {e}")
+            return {"status": "error", "note": f"Anthropic API Error: {str(e)}"}
             
-    return {"status": "message_logged", "note": "No promise date detected or API error."}
+    return {"status": "message_logged", "note": "No promise date detected. Did you forget to add ANTHROPIC_API_KEY?"}
