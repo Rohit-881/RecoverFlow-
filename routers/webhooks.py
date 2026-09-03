@@ -168,9 +168,18 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             sub_entity = payload["payload"]["subscription"]["entity"]
             txn_id = sub_entity.get("id")
             
+            amount_inr = 0
+            plan_id = sub_entity.get("plan_id")
+            if plan_id and rzp_client:
+                try:
+                    plan = rzp_client.plan.fetch(plan_id)
+                    amount_inr = int(plan.get("item", {}).get("amount", 0) / 100)
+                except Exception as e:
+                    print(f"Error fetching plan for subscription: {e}")
+            
             txn = Transaction(
                 id=txn_id,
-                amount=0,
+                amount=amount_inr,
                 reason=f"Subscription {event.split('.')[1].title()}",
                 method="Subscription",
                 bucket=FailureBucket.SUBSCRIPTION_FAILED,
