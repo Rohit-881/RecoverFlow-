@@ -248,7 +248,7 @@ Respond ONLY with valid JSON in this exact format, with no markdown formatting o
 }}
 """
             response = client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-3-haiku-20240307",
                 max_tokens=300,
                 messages=[{"role": "user", "content": prompt}]
             )
