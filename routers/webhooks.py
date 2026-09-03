@@ -132,7 +132,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
                 print(f"[LIVE WEBHOOK] Payment link paid for {txn.id}. Recovered!")
                 return {"status": "success"}
 
-        elif event == "invoice.expired":
+        elif event in ["invoice.expired", "invoice.cancelled"]:
             invoice_entity = payload["payload"]["invoice"]["entity"]
             amount_inr = int(invoice_entity.get("amount", 0) / 100)
             txn_id = invoice_entity.get("id")
@@ -140,7 +140,7 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             txn = Transaction(
                 id=txn_id,
                 amount=amount_inr,
-                reason="Invoice Expired (Net-30 unpaid)",
+                reason=f"Invoice {event.split('.')[1].title()} (B2B Unpaid)",
                 method="Invoice",
                 ltv=100000,
                 history=0.8,
