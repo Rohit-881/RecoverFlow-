@@ -186,7 +186,7 @@ The recovery scorer is a **`scikit-learn RandomForestClassifier`** (100 decision
 
 ## ✨ Key Innovation: Hybrid AI Promise-to-Pay (P2P) Engine
 
-RecoverFlow AI features an intelligent inbound webhook to handle customer SMS/chat replies. Instead of blindly trusting AI or relying entirely on human agents, it uses a **Hybrid Human-in-the-Loop Model** powered by **Google Gemini**:
+RecoverFlow AI features an intelligent inbound webhook to handle customer SMS/chat replies. Instead of blindly trusting AI or relying entirely on human agents, it uses a **Hybrid Human-in-the-Loop Model** powered by **Anthropic Claude**:
 
 - **Confidence Scoring**: Extracts the promised date, confidence level, and reasoning directly from natural language (e.g., *"Salary comes on the 5th"*).
 - **Automated Pausing**: If the AI is highly confident, it extracts the date, sets the status to `PROMISE_TO_PAY`, and automatically pauses dunning.

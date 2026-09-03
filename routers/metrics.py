@@ -64,11 +64,11 @@ async def get_metrics() -> DashboardMetrics:
     # AI Insight Generation (cached for 5 minutes)
     current_time = time.time()
     if current_time - ai_insights_cache["timestamp"] > 300:
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key and total_resolved > 0:
             try:
-                from google import genai
-                client = genai.Client(api_key=api_key)
+                from anthropic import Anthropic
+                client = Anthropic(api_key=api_key)
                 prompt = f"""You are analyzing a payment recovery dashboard.
 Current Metrics:
 - Revenue at Risk: ₹{total_risk}
@@ -83,8 +83,12 @@ Line 2 (Recovered Insight): ↑ Recovered...
 Line 3 (Rate Insight): ↑ Rate is up...
 Line 4 (Time Insight): ↓ Time is faster...
 Do not include line labels like 'Line 1:', just the 4 lines."""
-                response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
-                lines = [l.strip() for l in response.text.strip().split('\n') if l.strip()]
+                response = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=150,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                lines = [l.strip() for l in response.content[0].text.strip().split('\n') if l.strip()]
                 if len(lines) >= 4:
                     ai_insights_cache["insights"] = {
                         "risk_insight": lines[0].replace("Line 1 (Risk Insight): ", "").replace("Line 1: ", ""),
