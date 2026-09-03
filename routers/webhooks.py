@@ -163,6 +163,26 @@ async def razorpay_webhook(request: Request, background_tasks: BackgroundTasks):
             background_tasks.add_task(auto_resolve_mock, txn.id)
             print(f"[LIVE WEBHOOK] Processed B2B expired invoice {txn.id}")
             return {"status": "success"}
+            
+        elif event in ["subscription.cancelled", "subscription.halted"]:
+            sub_entity = payload["payload"]["subscription"]["entity"]
+            txn_id = sub_entity.get("id")
+            
+            txn = Transaction(
+                id=txn_id,
+                amount=0,
+                reason=f"Subscription {event.split('.')[1].title()}",
+                method="Subscription",
+                bucket=FailureBucket.SUBSCRIPTION_FAILED,
+                status=RecoveryStatus.MANUAL_REVIEW,
+                strategy="Manual intervention required"
+            )
+            txn.audit = [
+                AuditEntry(timestamp=datetime.now(timezone.utc), action=f"Live Webhook received: {event}", result="fail", cost_inr=0.0)
+            ]
+            transactions_db[txn.id] = txn
+            print(f"[LIVE WEBHOOK] Processed subscription {event.split('.')[1]} {txn.id}")
+            return {"status": "success"}
                 
         return {"status": "ignored"}
 
