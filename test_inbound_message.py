@@ -2,7 +2,7 @@ import requests
 import json
 
 def run_live_test():
-    base_url = "http://127.0.0.1:8000" # Changed to local server for testing
+    base_url = "https://recoverflow-backened.onrender.com" # Directly fetches from the live dashboard server
     
     # 1. Fetch existing transactions from the LIVE running server
     print(f"Fetching existing transactions from {base_url}...")
@@ -23,7 +23,7 @@ def run_live_test():
     # Set manual_txn_id to a specific ID (e.g. "pay_F8047f5965") to test a specific txn,
     # or keep manual_txn_id = None to automatically pick the first active transaction.
     # -------------------------------------------------------------------
-    manual_txn_id = None  # e.g. "pay_F8047f5965" (or leave None to pick automatically)
+    manual_txn_id = "pay_TXuYlFoAfjxhh4" # e.g. "pay_F8047f5965" (or leave None to pick automatically)
 
     if manual_txn_id:
         txn_id = manual_txn_id
@@ -42,10 +42,10 @@ def run_live_test():
     # -------------------------------------------------------------------
     
     # 1. Clear Promise to Pay (Logs Promise-to-Pay Date)
-    # message = "Sorry, I am out of town, I will pay my bill next Friday."
+    message = "Sorry, I am out of town, I will pay my bill next Friday."
     
     # 2. Vague / Complex Message (Triggers Manual Review)
-    message = "I might pay half next month if I have money"
+    # message = "I might pay half next month if I have money"
 
     payload = {
         "txn_id": txn_id,
