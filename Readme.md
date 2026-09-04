@@ -34,9 +34,9 @@ RecoverFlow AI detects revenue at risk from payment failures, scores recovery po
 
 | File | Purpose |
 |---|---|
-| `recoverflow_ai_dashboard.html` | Frontend dashboard — deployed on Vercel |
-| `recoverflow_ai_backend.py` | FastAPI backend with webhook handler, ML engine, strategy router, executor — deployed on Render |
-| `requirements.txt` | Python dependencies |
+| `dashboard.html` / `dashboard.js` | Frontend dashboard — deployed on Vercel |
+| `main.py` | FastAPI backend with webhook handler, ML engine, strategy router, executor — deployed on Render |
+| `requirement.txt` | Python dependencies |
 
 ---
 
@@ -54,18 +54,18 @@ No setup needed. Use the **Live Simulator** tab to trigger a full detect → sco
 
 ### 1. Install dependencies
 ```bash
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
 
 ### 2. Run the backend
 ```bash
-python recoverflow_ai_backend.py
+python main.py
 # or
-uvicorn recoverflow_ai_backend:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 ```
 
 ### 3. Open the frontend
-Open `recoverflow_ai_dashboard.html` in your browser. By default it points to the deployed backend — update the API base URL in the file if you want it to hit `http://localhost:8000` instead.
+Open `dashboard.html` in your browser. By default it points to the deployed backend — update the API base URL in `dashboard.js` if you want it to hit `http://localhost:8000` instead.
 
 ### 4. Test the webhook
 ```bash
@@ -219,6 +219,9 @@ Merchants can configure:
 
 ---
 
-## Team
+## Creator
 
 Built for Razorpay Buildathon 2026 — Track 03: AI Revenue Recovery
+
+**Rohit**  
+GitHub: [Rohit-881](https://github.com/Rohit-881)
